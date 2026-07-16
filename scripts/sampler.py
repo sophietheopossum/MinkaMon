@@ -448,11 +448,21 @@ def main():
     prev_procs_time = prev_time
     nvidia = read_nvidia()
 
+    coastlines = []
+    try:
+        with open(os.path.join(ASSETS, "coastlines.json")) as f:
+            coastlines = json.load(f)
+    except (OSError, ValueError):
+        pass
+
     print(json.dumps({
         "meta": {
             "cores": len(prev_cpu) - 1,
             "hasNvidia": NVIDIA_PCI is not None,
             "geoRanges": len(IP_STARTS),
+            # QML XHR can't GET local files without an env override, so the
+            # globe's wireframe rides in on the stream instead.
+            "coastlines": coastlines,
         }
     }), flush=True)
 
