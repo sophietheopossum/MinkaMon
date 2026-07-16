@@ -9,25 +9,11 @@ Panel {
 
     title: "WORLD VIEW · " + Sampler.conns.length + " LINKS"
 
-    property var coastlines: []
+    // Wireframe polylines arrive via the sampler's meta line (QML XHR can't
+    // read local files without an env override).
+    readonly property var coastlines: Sampler.coastlines
     property real rotation: 0
     property real pulse: 0
-
-    Component.onCompleted: {
-        const xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl("../assets/coastlines.json"));
-        xhr.onreadystatechange = () => {
-            if (xhr.readyState === XMLHttpRequest.DONE && xhr.responseText) {
-                try {
-                    root.coastlines = JSON.parse(xhr.responseText);
-                } catch (e) {
-                    console.log("MinkaMon: coastlines.json failed to parse");
-                }
-                globe.requestPaint();
-            }
-        };
-        xhr.send();
-    }
 
     Timer {
         interval: 66 // ~15 fps: plenty for a slow rotation, cheap on battery

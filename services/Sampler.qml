@@ -17,6 +17,7 @@ Singleton {
     property bool alive: false
     property int cores: 0
     property bool hasNvidia: false
+    property var coastlines: []
 
     // Last sample slices (see sampler.py for shapes).
     property var cpu: ({ total: 0, cores: [] })
@@ -57,6 +58,7 @@ Singleton {
                 if (sample.meta) {
                     root.cores = sample.meta.cores;
                     root.hasNvidia = sample.meta.hasNvidia;
+                    root.coastlines = sample.meta.coastlines || [];
                     root.alive = true;
                     return;
                 }
