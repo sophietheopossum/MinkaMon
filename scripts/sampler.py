@@ -192,6 +192,8 @@ def read_zones():
     except OSError:
         return []
     zones = [z for z in zones if z["managedPages"] > 0]
+    for z in zones:
+        z["managedKb"] = z["managedPages"] * PAGE_KB
     zones.sort(key=lambda z: z["startKb"])
     return zones
 

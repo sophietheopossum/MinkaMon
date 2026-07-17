@@ -145,7 +145,7 @@ Panel {
         Text {
             text: root.zones.map(z =>
                 z.name.toUpperCase() + " @" + root.fmtAddr(z.startKb)
-                + " " + root.fmtAddr(z.managedPages * 4)).join(" · ")
+                + " " + root.fmtAddr(z.managedKb)).join(" · ")
             font.family: Theme.monoFamily
             font.pixelSize: Theme.fontSize - 4
             font.letterSpacing: 1
