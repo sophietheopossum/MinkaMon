@@ -79,5 +79,6 @@ Item {
         anchors.bottom: parent.bottom
         anchors.margins: 12
         anchors.topMargin: 8
+        clip: true
     }
 }

@@ -75,6 +75,7 @@ Item {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
                         horizontalAlignment: modelData.align
+                        leftPadding: modelData.key === "comm" ? 14 : 0
                         text: modelData.label
                             + (root.sortKey === modelData.key
                                 ? (root.sortDesc ? " ▾" : " ▴") : "")

@@ -43,7 +43,7 @@ Panel {
         }
 
         Row {
-            spacing: 18
+            spacing: 13
 
             Repeater {
                 model: [

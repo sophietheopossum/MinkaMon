@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import "services"
 import "modules"
@@ -7,6 +8,19 @@ import "modules"
 // (memory blocks, rotating world view) in the Eternal Darkness palette,
 // fed by scripts/sampler.py via the Sampler singleton.
 ShellRoot {
+    // Temporary debug hook: qs -p <dir> ipc call debug shot /path.png
+    IpcHandler {
+        target: "debug"
+
+        function shot(path: string): void {
+            grabRoot.grabToImage(result => result.saveToFile(path));
+        }
+
+        function setPage(name: string): void {
+            win.page = name;
+        }
+    }
+
     FloatingWindow {
         id: win
 
@@ -16,6 +30,13 @@ ShellRoot {
         color: Theme.ground
 
         property string page: "monitor"
+
+        // Real Item root inside the proxy window; also the grab target for
+        // the debug screenshot hook (proxy items have no QML engine).
+        Item {
+            id: grabRoot
+
+            anchors.fill: parent
 
         Rectangle {
             id: topBar
@@ -116,6 +137,7 @@ ShellRoot {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             visible: win.page === "processes"
+        }
         }
     }
 }
