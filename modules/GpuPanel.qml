@@ -1,9 +1,9 @@
 import QtQuick
 import "../services"
 
-// Both GPUs: Iris Xe engine gauges (render/video/copy...) + frequency, and
-// the MX450 via nvidia-smi — shown as DORMANT while runtime-suspended (the
-// sampler deliberately never wakes it just to ask how busy it is).
+// Both GPUs: Iris Xe per-engine 60s line charts + frequency, and the MX450
+// via nvidia-smi — shown as DORMANT while runtime-suspended (the sampler
+// deliberately never wakes it just to ask how busy it is).
 Panel {
     id: root
 
@@ -11,6 +11,22 @@ Panel {
 
     readonly property var xe: Sampler.gpu ? Sampler.gpu.xe : null
     readonly property var nv: Sampler.gpu ? Sampler.gpu.nvidia : null
+
+    // Grow-only engine list: the reported set can gain engines mid-run (e.g.
+    // vcs when video starts), and Repeater delegates must survive ticks or
+    // their TrendLine histories reset.
+    property var engineKeys: []
+    onXeChanged: {
+        if (!xe)
+            return;
+        const merged = engineKeys.slice();
+        for (const key of Object.keys(xe.engines)) {
+            if (merged.indexOf(key) < 0)
+                merged.push(key);
+        }
+        if (merged.length !== engineKeys.length)
+            engineKeys = merged.sort();
+    }
 
     readonly property var engineNames: ({
         rcs: "RENDER",
@@ -22,7 +38,7 @@ Panel {
 
     Column {
         anchors.fill: parent
-        spacing: 8
+        spacing: 6
 
         Text {
             text: "IRIS XE" + (root.xe && root.xe.freqMhz !== null
@@ -35,15 +51,17 @@ Panel {
 
         Column {
             width: parent.width
-            spacing: 5
+            spacing: 4
 
             Repeater {
-                model: root.xe ? Object.keys(root.xe.engines).sort() : []
+                model: root.engineKeys
 
                 Row {
                     spacing: 8
 
-                    readonly property real pct: root.xe.engines[modelData]
+                    readonly property real pct:
+                        root.xe && root.xe.engines[modelData] !== undefined
+                            ? root.xe.engines[modelData] : 0
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -54,21 +72,14 @@ Panel {
                         color: Theme.textFaint
                     }
 
-                    Rectangle {
+                    TrendLine {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.parent.width - 62 - 46 - 16
-                        height: 6
-                        color: Theme.surfaceRaised
-
-                        Rectangle {
-                            width: parent.width * pct / 100
-                            height: parent.height
-                            color: Theme.red
-
-                            Behavior on width {
-                                NumberAnimation { duration: 350 }
-                            }
-                        }
+                        height: 16
+                        value: pct
+                        maxValue: 100
+                        lineColor: Theme.red
+                        fillColor: Theme.gaugeDim
                     }
 
                     Text {
@@ -113,22 +124,14 @@ Panel {
                 ? Theme.textMuted : Theme.textFaint
         }
 
-        Rectangle {
+        TrendLine {
             visible: Sampler.hasNvidia && root.nv && root.nv.asleep === false
             width: parent.width
-            height: 6
-            color: Theme.surfaceRaised
-
-            Rectangle {
-                width: root.nv && !root.nv.asleep
-                    ? parent.width * root.nv.utilPct / 100 : 0
-                height: parent.height
-                color: Theme.purple
-
-                Behavior on width {
-                    NumberAnimation { duration: 350 }
-                }
-            }
+            height: 18
+            value: root.nv && !root.nv.asleep ? root.nv.utilPct : 0
+            maxValue: 100
+            lineColor: Theme.purple
+            fillColor: "#231a2e"
         }
     }
 }
