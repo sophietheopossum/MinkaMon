@@ -9,12 +9,16 @@ qs -p /path/to/MinkaMon
 
 ## Panels
 
-- **CPU** — per-core load bars + 60 s total-load history
-- **GPU** — Iris Xe per-engine busyness (fdinfo cycle counters) and
-  frequency; NVIDIA dGPU via nvidia-smi, shown as DORMANT while
+- **CPU** — per-core 60 s line charts + total-load history
+- **GPU** — Iris Xe per-engine 60 s line charts (fdinfo cycle counters)
+  and frequency; NVIDIA dGPU via nvidia-smi, shown as DORMANT while
   runtime-suspended (the sampler never wakes a sleeping card)
-- **MEMORY** — eDEX-style block grid (used / cache) + swap bar
-- **THERMAL** — every hwmon temperature sensor
+- **MEMORY** — eDEX-style block grid over the real physical address
+  space: zones from /proc/zoneinfo (DMA / DMA32 / Normal), per-zone
+  used/cache cell counts from actual zone occupancy, stable scatter
+  within each zone (exact page positions need root); swap history
+- **THERMAL** — every hwmon temperature sensor, each with a 60 s line
+  chart
 - **NETWORK** — up/down rates with history, per-interface breakdown
 - **WORLD VIEW** — rotating orthographic globe; live established TCP
   peers geolocated offline and pulsed on the map
