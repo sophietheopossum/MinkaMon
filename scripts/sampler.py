@@ -210,9 +210,11 @@ def read_mem():
         "totalKb": total,
         "usedKb": total - available,
         "availableKb": available,
+        "freeKb": fields.get("MemFree", 0),
         "cacheKb": fields.get("Cached", 0) + fields.get("Buffers", 0),
         "swapTotalKb": swap_total,
         "swapUsedKb": swap_total - swap_free,
+        "zones": read_zones(),
     }
 
 
