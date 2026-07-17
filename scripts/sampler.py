@@ -157,6 +157,45 @@ def cpu_percentages(prev, cur):
 
 # --- memory ---
 
+def read_zones():
+    """Physical memory zones from /proc/zoneinfo, in address order.
+
+    Per-cell physical page state (/proc/kpageflags) needs root, but zoneinfo
+    is world-readable and gives real per-zone occupancy: managed - free pages
+    used within each physical address range.
+    """
+    zones = []
+    zone = None
+    try:
+        with open("/proc/zoneinfo") as f:
+            for line in f:
+                if line.startswith("Node"):
+                    parts = line.replace(",", " ").split()
+                    zone = {
+                        "name": parts[3],
+                        "startKb": 0,
+                        "presentPages": 0,
+                        "managedPages": 0,
+                        "freePages": 0,
+                    }
+                    zones.append(zone)
+                elif zone is not None:
+                    parts = line.split()
+                    if line.startswith("  pages free"):
+                        zone["freePages"] = int(parts[2])
+                    elif parts and parts[0] == "present":
+                        zone["presentPages"] = int(parts[1])
+                    elif parts and parts[0] == "managed":
+                        zone["managedPages"] = int(parts[1])
+                    elif parts and parts[0] == "start_pfn:":
+                        zone["startKb"] = int(parts[1]) * PAGE_KB
+    except OSError:
+        return []
+    zones = [z for z in zones if z["managedPages"] > 0]
+    zones.sort(key=lambda z: z["startKb"])
+    return zones
+
+
 def read_mem():
     fields = {}
     with open("/proc/meminfo") as f:
