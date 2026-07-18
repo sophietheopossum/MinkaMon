@@ -18,6 +18,12 @@ Singleton {
 
     // Panel accents: red-on-dark reinterpretation of eDEX-UI's cyan glow.
     readonly property color glow: "#ff4a5e"
+
+    // Per-series tints for multi-line charts (one per CPU core).
+    readonly property var seriesPalette: [
+        "#ff4a5e", "#e0a026", "#a488c9", "#7dc98c",
+        "#e06c9a", "#6fb7c9", "#ece5e7", "#d97b4a",
+    ]
     readonly property color gaugeDim: "#3a1219"
     readonly property color okGreen: "#7dc98c"
     readonly property color warnAmber: "#e0a026"

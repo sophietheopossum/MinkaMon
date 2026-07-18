@@ -9,7 +9,9 @@ qs -p /path/to/MinkaMon
 
 ## Panels
 
-- **CPU** — per-core 60 s line charts + total-load history
+- **CPU** — two stacked 60 s multi-line charts with every core in each:
+  load on top, coretemp below (logical cores mapped to their physical
+  sensor via sysfs topology, so hyperthread siblings overlap)
 - **GPU** — Iris Xe per-engine 60 s line charts (fdinfo cycle counters)
   and frequency; NVIDIA dGPU via nvidia-smi, shown as DORMANT while
   runtime-suspended (the sampler never wakes a sleeping card)

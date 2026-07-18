@@ -139,6 +139,42 @@ def read_cpu_times():
     return out
 
 
+def read_core_ids():
+    """logical cpu index -> physical core id (coretemp reports per physical)."""
+    ids = {}
+    for path in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/topology/core_id"):
+        try:
+            cpu = int(path.split("/cpu")[-1].split("/")[0])
+            with open(path) as f:
+                ids[cpu] = int(f.read().strip())
+        except (OSError, ValueError):
+            continue
+    return ids
+
+
+CORE_IDS = read_core_ids()
+
+
+def cpu_temp_fields(temps, ncores):
+    """Package + per-logical-core °C pulled from the coretemp hwmon chip."""
+    package = None
+    phys = {}
+    for t in temps:
+        if t["chip"] != "coretemp":
+            continue
+        if t["label"].startswith("Package"):
+            package = t["c"]
+        elif t["label"].startswith("Core "):
+            try:
+                phys[int(t["label"][5:])] = t["c"]
+            except ValueError:
+                pass
+    return {
+        "packageC": package,
+        "coreTemps": [phys.get(CORE_IDS.get(i)) for i in range(ncores)],
+    }
+
+
 def cpu_percentages(prev, cur):
     result = {"total": 0.0, "cores": []}
     cores = []
@@ -523,14 +559,18 @@ def main():
         if tick % 2 == 0:
             nvidia = read_nvidia()
 
+        temps = read_temps()
+        cpu = cpu_percentages(prev_cpu, cur_cpu)
+        cpu.update(cpu_temp_fields(temps, len(cpu["cores"])))
+
         sample = {
-            "cpu": cpu_percentages(prev_cpu, cur_cpu),
+            "cpu": cpu,
             "mem": read_mem(),
             "gpu": {
                 "xe": {"engines": xe_busy(prev_xe, cur_xe), "freqMhz": xe_freq()},
                 "nvidia": nvidia,
             },
-            "temps": read_temps(),
+            "temps": temps,
             "net": net_rates(prev_net, cur_net, dt),
         }
         if tick % PROCS_EVERY == 0:

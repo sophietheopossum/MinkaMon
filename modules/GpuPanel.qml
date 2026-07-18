@@ -36,8 +36,13 @@ Panel {
         vecs: "ENHANCE",
     })
 
+    // Xe fills from the top, the MX450 block pins to the panel bottom, so a
+    // short window squeezes the gap between them instead of clipping the
+    // dGPU chart off the panel.
     Column {
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
         spacing: 6
 
         Text {
@@ -94,6 +99,14 @@ Panel {
                 }
             }
         }
+
+    }
+
+    Column {
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        spacing: 6
 
         Rectangle {
             width: parent.width
