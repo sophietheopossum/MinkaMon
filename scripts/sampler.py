@@ -28,7 +28,6 @@ import os
 import socket
 import struct
 import subprocess
-import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -308,13 +307,17 @@ def xe_busy(prev, cur):
 
 
 def xe_freq():
+    """(actual, requested) MHz; actual is 0 while the GT is power-gated."""
     for path in glob.glob("/sys/class/drm/card*/device/tile0/gt*/freq0/act_freq"):
         try:
             with open(path) as f:
-                return int(f.read().strip())
+                act = int(f.read().strip())
+            with open(path.replace("act_freq", "cur_freq")) as f:
+                cur = int(f.read().strip())
+            return act, cur
         except (OSError, ValueError):
             continue
-    return None
+    return None, None
 
 
 # --- NVIDIA (Optimus-safe) ---
@@ -567,7 +570,8 @@ def main():
             "cpu": cpu,
             "mem": read_mem(),
             "gpu": {
-                "xe": {"engines": xe_busy(prev_xe, cur_xe), "freqMhz": xe_freq()},
+                "xe": dict(zip(("freqMhz", "curFreqMhz"), xe_freq()),
+                           engines=xe_busy(prev_xe, cur_xe)),
                 "nvidia": nvidia,
             },
             "temps": temps,

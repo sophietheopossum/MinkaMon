@@ -46,8 +46,17 @@ Panel {
         spacing: 6
 
         Text {
-            text: "IRIS XE" + (root.xe && root.xe.freqMhz !== null
-                ? " · " + root.xe.freqMhz + " MHz" : "")
+            // act_freq drops to 0 while the GT is power-gated; show the
+            // requested clock with a GATED tag instead of a scary 0 MHz.
+            text: {
+                let line = "IRIS XE";
+                if (!root.xe || root.xe.freqMhz === null)
+                    return line;
+                if (root.xe.freqMhz > 0)
+                    return line + " · " + root.xe.freqMhz + " MHz";
+                return line + " · " + (root.xe.curFreqMhz || 0)
+                    + " MHz · GATED";
+            }
             font.family: Theme.monoFamily
             font.pixelSize: Theme.fontSize - 2
             font.letterSpacing: 1

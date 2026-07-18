@@ -27,16 +27,23 @@ ShellRoot {
         title: "MinkaMon"
         implicitWidth: 1160
         implicitHeight: 720
+        // Below this the instrument panels start colliding (GPU panel's
+        // top/bottom columns, memory grid rows).
+        minimumSize: Qt.size(980, 620)
         color: Theme.ground
 
         property string page: "monitor"
 
         // Real Item root inside the proxy window; also the grab target for
         // the debug screenshot hook (proxy items have no QML engine).
-        Item {
+        // A Rectangle rather than an Item so grabs composite over the ground
+        // colour instead of leaving alpha holes where only the window
+        // background shows.
+        Rectangle {
             id: grabRoot
 
             anchors.fill: parent
+            color: Theme.ground
 
         Rectangle {
             id: topBar
