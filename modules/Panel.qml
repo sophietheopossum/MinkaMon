@@ -8,6 +8,8 @@ Item {
 
     property string title: ""
     default property alias contentData: content.data
+    // Optional right-aligned content on the header line (e.g. a legend).
+    property alias headerData: headerExtra.data
 
     Rectangle {
         anchors.fill: parent
@@ -68,6 +70,17 @@ Item {
             font.letterSpacing: 2
             color: Theme.textMuted
         }
+    }
+
+    Item {
+        id: headerExtra
+
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 8
+        anchors.rightMargin: 12
+        height: header.height
+        width: childrenRect.width
     }
 
     Item {

@@ -31,33 +31,18 @@ Panel {
         }
     }
 
+    headerData: CoreLegend {
+        anchors.verticalCenter: parent.verticalCenter
+    }
+
     Column {
-        id: layout
         anchors.fill: parent
         spacing: 10
-
-        // Height left for the charts once the shared legend row is placed.
-        readonly property real chartArea: height - legendRow.height - spacing
-
-        // Column children can't anchor, so wrap the legend to right-align it.
-        Item {
-            id: legendRow
-            width: parent.width
-            height: childrenRect.height
-
-            CoreLegend {
-                anchors.right: parent.right
-            }
-        }
 
         Rectangle {
             width: parent.width
             height: root.hasTemps
-                ? (
-                    layout.chartArea - layout.spacing
-            ) 
-                / 2 : 
-                layout.chartArea
+                ? (parent.height - 10) / 2 : parent.height
             color: Theme.surfaceRaised
 
             MultiTrendLine {
@@ -82,7 +67,7 @@ Panel {
         Rectangle {
             width: parent.width
             height: (
-                layout.chartArea - layout.spacing
+                parent.height - 10
             ) / 2
             visible: root.hasTemps
             color: Theme.surfaceRaised
