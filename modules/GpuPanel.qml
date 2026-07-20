@@ -1,9 +1,10 @@
 import QtQuick
 import "../services"
 
-// Both GPUs: Iris Xe per-engine 60s line charts + frequency, and the MX450
-// via nvidia-smi — shown as DORMANT while runtime-suspended (the sampler
-// deliberately never wakes it just to ask how busy it is).
+// Both GPUs: Iris Xe engines as one stacked 60s multi-line chart (CPU-panel
+// style, one series per engine), and the MX450 via nvidia-smi — shown as
+// DORMANT while runtime-suspended (the sampler deliberately never wakes it
+// just to ask how busy it is).
 Panel {
     id: root
 
@@ -13,8 +14,8 @@ Panel {
     readonly property var nv: Sampler.gpu ? Sampler.gpu.nvidia : null
 
     // Grow-only engine list: the reported set can gain engines mid-run (e.g.
-    // vcs when video starts), and Repeater delegates must survive ticks or
-    // their TrendLine histories reset.
+    // vcs when video starts), and the chart tracks series history by index,
+    // so existing entries must keep their positions across ticks.
     property var engineKeys: []
     onXeChanged: {
         if (!xe)
@@ -25,7 +26,7 @@ Panel {
                 merged.push(key);
         }
         if (merged.length !== engineKeys.length)
-            engineKeys = merged.sort();
+            engineKeys = merged;
     }
 
     readonly property var engineNames: ({
@@ -36,16 +37,17 @@ Panel {
         vecs: "ENHANCE",
     })
 
-    // Xe fills from the top, the MX450 block pins to the panel bottom, so a
-    // short window squeezes the gap between them instead of clipping the
-    // dGPU chart off the panel.
-    Column {
+    Item {
+        id: xeHeader
+
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 6
+        height: xeTitle.height
 
         Text {
+            id: xeTitle
+
             // act_freq drops to 0 while the GT is power-gated; show the
             // requested clock with a GATED tag instead of a scary 0 MHz.
             text: {
@@ -63,55 +65,63 @@ Panel {
             color: Theme.textMuted
         }
 
-        Column {
-            width: parent.width
-            spacing: 4
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: 
+                parent
+                    .verticalCenter
+            spacing: 6
 
             Repeater {
                 model: root.engineKeys
 
-                Row {
-                    spacing: 8
-
-                    readonly property real pct:
-                        root.xe && root.xe.engines[modelData] !== undefined
-                            ? root.xe.engines[modelData] : 0
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 62
-                        text: root.engineNames[modelData] || modelData.toUpperCase()
-                        font.family: Theme.monoFamily
-                        font.pixelSize: Theme.fontSize - 3
-                        color: Theme.textFaint
-                    }
-
-                    TrendLine {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.parent.width - 62 - 46 - 16
-                        height: 16
-                        value: pct
-                        maxValue: 100
-                        lineColor: Theme.red
-                        fillColor: Theme.gaugeDim
-                    }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 46
-                        horizontalAlignment: Text.AlignRight
-                        text: pct.toFixed(0) + "%"
-                        font.family: Theme.monoFamily
-                        font.pixelSize: Theme.fontSize - 3
-                        color: Theme.textMuted
-                    }
+                Text {
+                    text: root.engineNames[modelData]
+                        || modelData.toUpperCase()
+                    font.family: Theme.monoFamily
+                    font.pixelSize: Theme.fontSize - 4
+                    color: Theme.seriesPalette[
+                        index % Theme.seriesPalette.length]
                 }
             }
         }
+    }
 
+    // The Xe chart takes whatever height the MX450 block leaves, so a short
+    // window squeezes the chart instead of clipping the dGPU off the panel.
+    Rectangle {
+        anchors.top: xeHeader.bottom
+        anchors.topMargin: 6
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: nvBlock.top
+        anchors.bottomMargin: Sampler.hasNvidia ? 10 : 0
+        color: Theme.surfaceRaised
+
+        MultiTrendLine {
+            anchors.fill: parent
+            anchors.margins: 1
+            current: root.engineKeys.map(key =>
+                root.xe && root.xe.engines[key] !== undefined
+                    ? root.xe.engines[key] : null)
+            maxValue: 100
+        }
+
+        Text {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 3
+            text: "ENGINES"
+            font.family: Theme.monoFamily
+            font.pixelSize: Theme.fontSize - 4
+            font.letterSpacing: 1
+            color: Theme.textFaint
+        }
     }
 
     Column {
+        id: nvBlock
+
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -146,14 +156,31 @@ Panel {
                 ? Theme.textMuted : Theme.textFaint
         }
 
-        TrendLine {
+        Rectangle {
             visible: Sampler.hasNvidia && root.nv && root.nv.asleep === false
             width: parent.width
-            height: 18
-            value: root.nv && !root.nv.asleep ? root.nv.utilPct : 0
-            maxValue: 100
-            lineColor: Theme.purple
-            fillColor: "#231a2e"
+            height: 44
+            color: Theme.surfaceRaised
+
+            TrendLine {
+                anchors.fill: parent
+                anchors.margins: 1
+                value: root.nv && !root.nv.asleep ? root.nv.utilPct : 0
+                maxValue: 100
+                lineColor: Theme.purple
+                fillColor: "#231a2e"
+            }
+
+            Text {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 3
+                text: "MX450"
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize - 4
+                font.letterSpacing: 1
+                color: Theme.textFaint
+            }
         }
     }
 }
