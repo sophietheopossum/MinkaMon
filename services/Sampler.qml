@@ -17,6 +17,8 @@ Singleton {
     property bool alive: false
     property int cores: 0
     property bool hasNvidia: false
+    property string machineModel: ""
+    property string chassisType: ""
     property var coastlines: []
 
     // Last sample slices (see sampler.py for shapes).
@@ -58,6 +60,8 @@ Singleton {
                 if (sample.meta) {
                     root.cores = sample.meta.cores;
                     root.hasNvidia = sample.meta.hasNvidia;
+                    root.machineModel = sample.meta.model || "";
+                    root.chassisType = sample.meta.chassis || "";
                     root.coastlines = sample.meta.coastlines || [];
                     root.alive = true;
                     return;

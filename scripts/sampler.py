@@ -406,6 +406,20 @@ def read_temps():
     return temps
 
 
+# --- machine identity ---
+
+def read_dmi():
+    # Model + chassis type let the UI pick a matching board schematic.
+    info = {"model": "", "chassis": ""}
+    for key, fname in (("model", "product_name"), ("chassis", "chassis_type")):
+        try:
+            with open("/sys/class/dmi/id/" + fname) as f:
+                info[key] = f.read().strip()
+        except OSError:
+            pass
+    return info
+
+
 # --- network ---
 
 def read_net():
@@ -537,11 +551,14 @@ def main():
     except (OSError, ValueError):
         pass
 
+    dmi = read_dmi()
     print(json.dumps({
         "meta": {
             "cores": len(prev_cpu) - 1,
             "hasNvidia": NVIDIA_PCI is not None,
             "geoRanges": len(IP_STARTS),
+            "model": dmi["model"],
+            "chassis": dmi["chassis"],
             # QML XHR can't GET local files without an env override, so the
             # globe's wireframe rides in on the stream instead.
             "coastlines": coastlines,
