@@ -50,6 +50,22 @@ ShellRoot {
             procWin.visible = true;
     }
 
+    function closeAll() {
+        overviewPending = false;
+        overviewTimeout.stop();
+        cpuWin.visible = false;
+        gpuWin.visible = false;
+        memWin.visible = false;
+        netWin.visible = false;
+        globeWin.visible = false;
+        procWin.visible = false;
+        ssdTempWin.visible = false;
+        boardTempWin.visible = false;
+        wifiTempWin.visible = false;
+        cpuTempWin.visible = false;
+        gpuTempWin.visible = false;
+    }
+
     // Full overview: open the 0.4.0 monitor-page set and arrange the real
     // windows into its grid (CPU/GPU/NET left column, schematic centre,
     // MEMORY + GLOBE right) via the compositor's windows.setRect.
@@ -147,6 +163,10 @@ ShellRoot {
 
         function open(name: string): void {
             shellRoot.openZone(name);
+        }
+
+        function closeAll(): void {
+            shellRoot.closeAll();
         }
     }
 
@@ -342,6 +362,11 @@ ShellRoot {
                         label: "OVERVIEW"
                         active: shellRoot.overviewPending
                         onClicked: shellRoot.fullOverview()
+                    }
+
+                    TopChip {
+                        label: "CLOSE ALL"
+                        onClicked: shellRoot.closeAll()
                     }
 
                     TopChip {
