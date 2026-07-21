@@ -1,15 +1,19 @@
 import QtQuick
 import "../services"
 
-// The machine itself, centre-stage: red board schematic with live heat
-// blobs at the physical sensor locations, per-sensor trend readouts along
-// the bottom, and exported component anchor points so LeaderLines can wire
-// the surrounding panels into the board. Knows the ZenBook UX482's layout
-// (per the UX482EG teardown); anything else gets a generic tower.
+// The machine itself: red board schematic with live heat blobs at the
+// physical sensor locations.
+// Every piece of hardware with a view behind it is a clickable zone
+// hovering lights it up and names what it opens, & clicking emits zoneClicked for
+// the shell to open satellite windows.
+// Knows the ZenBook UX482's layout (per the UX482EG teardown); anything
+// else gets a generic tower.
 Panel {
     id: root
 
     title: zenbook ? "SYSTEM // UX482EG" : "SYSTEM"
+
+    signal zoneClicked(string zone)
 
     readonly property bool zenbook:
         Sampler.machineModel.indexOf("UX482") >= 0
@@ -69,522 +73,435 @@ Panel {
             : root.maxC >= 70 ? Theme.warnAmber : Theme.textFaint
     }
 
-    // --- board transform, shared by the canvas and the anchor exports ---
-    // The board is top-anchored with fixed headroom above it: that strip is
-    // the "lane" region the leader lines travel through.
+    // --- board transform, shared by the canvas and the click zones ---
     readonly property real boardW: zenbook ? 324 : 440
     readonly property real boardH: zenbook ? 222 : 400
-    readonly property real laneRoom: 30
     readonly property real bs: Math.max(0.05, Math.min(
         (map.width - 12) / boardW,
-        (map.height - laneRoom - 6) / boardH))
+        (map.height - 12) / boardH))
     readonly property real bx: (map.width - boardW * bs) / 2
-    readonly property real by: laneRoom
+    readonly property real by: (map.height - boardH * bs) / 2
 
-    // Component tie points in board units (mm on the real UX482 chassis).
-    readonly property var anchorUnits: zenbook ? {
-        cpu: { x: 140, top: 34, bottom: 56 },
-        gpu: { x: 192, top: 42, bottom: 58 },
-        ram: { x: 111, top: 62, bottom: 83 },
-        wifi: { x: 250, top: 67, bottom: 81 },
-        ssd: { x: 75, top: 95, bottom: 107 },
-        board: { x: 165, top: 48, bottom: 80 },
-    } : {
-        cpu: { x: 252, top: 90, bottom: 134 },
-        gpu: { x: 255, top: 220, bottom: 254 },
-        ram: { x: 338, top: 62, bottom: 180 },
-        wifi: { x: 397, top: 300, bottom: 312 },
-        ssd: { x: 240, top: 270, bottom: 280 },
-        board: { x: 341, top: 265, bottom: 287 },
-    }
-
-    // Exports for LeaderLines: points are in schematicItem coordinates.
-    readonly property Item schematicItem: map
-    readonly property real laneBottom:
-        by + (zenbook ? 2 : 5) * bs
-
-    function anchorPoint(name, edge) {
-        const u = anchorUnits[name];
-        if (!u)
-            return null;
-        return {
-            x: bx + u.x * bs,
-            y: by + (edge === "bottom" ? u.bottom : u.top) * bs,
-        };
-    }
-
-    function labelFor(name) {
-        const zen = {
-            cpu: "CPU PACKAGE",
-            gpu: "MX450",
-            ram: "LPDDR4X",
-            wifi: "WI-FI",
-            ssd: "NVME SSD",
-            board: "BOARD",
-        };
-        const generic = {
-            cpu: "CPU",
-            gpu: "GPU",
-            ram: "RAM",
-            wifi: "WI-FI",
-            ssd: "NVME SSD",
-            board: "CHIPSET",
-        };
-        return (zenbook ? zen : generic)[name] || name.toUpperCase();
-    }
-
-    readonly property var readoutTies: [
-        { item: roSsd, target: "ssd" },
-        { item: roCpu, target: "cpu" },
-        { item: roBoard, target: "board" },
-        { item: roWifi, target: "wifi" },
+    // Clickable hardware, in board units. Order is z-order: the broad
+    // board region sits first so the specific components on it win the
+    // hover/click.
+    readonly property var zones: zenbook ? [
+        { zone: "board", label: "▸ BOARD °C",
+            x: 18, y: 12, w: 288, h: 74, chipBelow: true },
+        { zone: "cpu", label: "▸ CPU", x: 124, y: 29, w: 32, h: 32 },
+        { zone: "gpu", label: "▸ GPU", x: 179, y: 37, w: 26, h: 26 },
+        { zone: "ram", label: "▸ MEMORY", x: 99, y: 57, w: 24, h: 31 },
+        { zone: "wifi", label: "▸ NETWORK", x: 237, y: 62, w: 26, h: 24 },
+        { zone: "ssd", label: "▸ SSD °C", x: 30, y: 90, w: 90, h: 22 },
+    ] : [
+        { zone: "board", label: "▸ BOARD °C",
+            x: 170, y: 40, w: 240, h: 250, chipBelow: true },
+        { zone: "cpu", label: "▸ CPU", x: 225, y: 85, w: 54, h: 54 },
+        { zone: "ram", label: "▸ MEMORY", x: 305, y: 57, w: 65, h: 128 },
+        { zone: "gpu", label: "▸ GPU", x: 145, y: 212, w: 230, h: 46 },
+        { zone: "ssd", label: "▸ SSD °C", x: 195, y: 263, w: 90, h: 20 },
+        { zone: "wifi", label: "▸ NETWORK",
+            x: 383, y: 294, w: 26, h: 22 },
     ]
 
-    // Per-sensor 60s trend readout, wired up into the board by a riser.
-    component TempReadout: Rectangle {
-        id: readout
+    Canvas {
+        id: map
 
-        property string label
-        property var value
+        anchors.fill: parent
 
-        readonly property color tint: value === null || value === undefined
-            ? Theme.textFaint
-            : value >= 85 ? Theme.red
-            : value >= 70 ? Theme.warnAmber : Theme.textMuted
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
 
-        width: (strip.width - 30) / 4
-        height: strip.height
-        color: Theme.surfaceRaised
+        Connections {
+            target: Sampler
 
-        TrendLine {
-            anchors.fill: parent
-            anchors.margins: 1
-            value: readout.value === null || readout.value === undefined
-                ? 0 : readout.value
-            maxValue: 100
-            lineColor: readout.tint
-            fillColor: Theme.gaugeDim
+            function onTicked() {
+                map.requestPaint();
+            }
         }
 
-        Text {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 3
-            text: readout.label
-            font.family: Theme.monoFamily
-            font.pixelSize: Theme.fontSize - 4
-            font.letterSpacing: 1
-            color: Theme.textFaint
+        // Temperature -> [r, g, b]: ember -> red -> glow -> amber ->
+        // white-hot.
+        function heatRgb(c) {
+            const stops = [
+                [30, 70, 15, 25],
+                [50, 143, 30, 45],
+                [65, 224, 38, 60],
+                [78, 255, 74, 94],
+                [88, 224, 160, 38],
+                [96, 255, 236, 210],
+            ];
+            if (c <= stops[0][0])
+                return stops[0].slice(1);
+            for (let i = 1; i < stops.length; i++) {
+                if (c <= stops[i][0]) {
+                    const a = stops[i - 1], b = stops[i];
+                    const t = (c - a[0]) / (b[0] - a[0]);
+                    return [
+                        Math.round(a[1] + (b[1] - a[1]) * t),
+                        Math.round(a[2] + (b[2] - a[2]) * t),
+                        Math.round(a[3] + (b[3] - a[3]) * t),
+                    ];
+                }
+            }
+            return stops[stops.length - 1].slice(1);
         }
 
-        Text {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 3
-            text: readout.value === null || readout.value === undefined
-                ? "—" : readout.value.toFixed(0) + "°"
-            font.family: Theme.monoFamily
-            font.pixelSize: Theme.fontSize - 4
-            color: readout.tint
+        function roundedPath(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
         }
-    }
 
-    Item {
-        id: schematicArea
+        function blob(ctx, x, y, r, c) {
+            if (c === null || c === undefined)
+                return;
+            const rgb = heatRgb(c);
+            const a = 0.18
+                + Math.max(0, Math.min((c - 30) / 60, 1)) * 0.55;
+            const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+            g.addColorStop(0, "rgba(" + rgb[0] + "," + rgb[1] + ","
+                + rgb[2] + "," + a.toFixed(3) + ")");
+            g.addColorStop(1, "rgba(" + rgb[0] + "," + rgb[1] + ","
+                + rgb[2] + ",0)");
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: strip.top
-        anchors.bottomMargin: 10
+        // "NAME 62°" label; the value tints with the shared warn scheme.
+        function tag(ctx, x, y, name, c, opts) {
+            opts = opts || {};
+            ctx.font = "9px " + Theme.monoFamily;
+            ctx.textAlign = "left";
+            const value = c === null || c === undefined
+                ? (opts.fallback || "—") : c.toFixed(0) + "°";
+            const nameW = ctx.measureText(name + " ").width;
+            let sx = x;
+            if (opts.align === "center")
+                sx = x - (nameW + ctx.measureText(value).width) / 2;
+            else if (opts.align === "right")
+                sx = x - nameW - ctx.measureText(value).width;
+            ctx.fillStyle = Theme.textFaint;
+            ctx.fillText(name + " ", sx, y);
+            ctx.fillStyle = c === null || c === undefined
+                ? Theme.textFaint
+                : c >= 85 ? Theme.red
+                : c >= 70 ? Theme.warnAmber : Theme.textMuted;
+            ctx.fillText(value, sx + nameW, y);
+        }
 
-        Canvas {
-            id: map
-
-            anchors.fill: parent
-
-            onWidthChanged: requestPaint()
-            onHeightChanged: requestPaint()
-
-            Connections {
-                target: Sampler
-
-                function onTicked() {
-                    map.requestPaint();
-                }
+        function fan(ctx, x, y, r) {
+            ctx.strokeStyle = Theme.redDim;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(x, y, r * 0.22, 0, Math.PI * 2);
+            ctx.stroke();
+            for (let k = 0; k < 5; k++) {
+                const a = k / 5 * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(x + Math.cos(a) * r * 0.3,
+                    y + Math.sin(a) * r * 0.3);
+                ctx.quadraticCurveTo(
+                    x + Math.cos(a + 0.5) * r * 0.72,
+                    y + Math.sin(a + 0.5) * r * 0.72,
+                    x + Math.cos(a + 0.9) * r * 0.95,
+                    y + Math.sin(a + 0.9) * r * 0.95);
+                ctx.stroke();
             }
+        }
 
-            // Temperature -> [r, g, b]: ember -> red -> glow -> amber ->
-            // white-hot.
-            function heatRgb(c) {
-                const stops = [
-                    [30, 70, 15, 25],
-                    [50, 143, 30, 45],
-                    [65, 224, 38, 60],
-                    [78, 255, 74, 94],
-                    [88, 224, 160, 38],
-                    [96, 255, 236, 210],
-                ];
-                if (c <= stops[0][0])
-                    return stops[0].slice(1);
-                for (let i = 1; i < stops.length; i++) {
-                    if (c <= stops[i][0]) {
-                        const a = stops[i - 1], b = stops[i];
-                        const t = (c - a[0]) / (b[0] - a[0]);
-                        return [
-                            Math.round(a[1] + (b[1] - a[1]) * t),
-                            Math.round(a[2] + (b[2] - a[2]) * t),
-                            Math.round(a[3] + (b[3] - a[3]) * t),
-                        ];
-                    }
-                }
-                return stops[stops.length - 1].slice(1);
+        // Bottom-cover-off top view, hinge at the top. Board units are mm
+        // on the real 324x222 chassis.
+        function paintZenbook(ctx) {
+            const X = u => root.bx + u * root.bs;
+            const Y = v => root.by + v * root.bs;
+            const S = u => u * root.bs;
+            const r = root.readings;
+
+            // Heat blobs first, additive, clipped to the chassis.
+            ctx.save();
+            roundedPath(ctx, X(2), Y(2), S(320), S(218), S(10));
+            ctx.clip();
+            ctx.globalCompositeOperation = "lighter";
+            blob(ctx, X(165), Y(62), S(62), r.board);
+            blob(ctx, X(140), Y(45), S(52), r.pkg);
+            blob(ctx, X(192), Y(50), S(40), root.gpuC);
+            blob(ctx, X(75), Y(101), S(36), r.ssd);
+            blob(ctx, X(250), Y(74), S(28), r.wifi);
+            ctx.restore();
+
+            // Chassis + hinge stubs.
+            ctx.strokeStyle = Theme.redDim;
+            ctx.lineWidth = 1;
+            roundedPath(ctx, X(2), Y(2), S(320), S(218), S(10));
+            ctx.stroke();
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = Theme.redDim;
+            ctx.fillRect(X(80), Y(2), S(44), S(5));
+            ctx.fillRect(X(200), Y(2), S(44), S(5));
+
+            // Motherboard region under the ScreenPad.
+            ctx.globalAlpha = 0.6;
+            roundedPath(ctx, X(18), Y(12), S(288), S(74), S(4));
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            fan(ctx, X(45), Y(45), S(30));
+            fan(ctx, X(279), Y(45), S(30));
+
+            // Heat pipe run: left fan -> CPU -> MX450 -> right fan.
+            ctx.strokeStyle = Theme.redDim;
+            ctx.globalAlpha = 0.8;
+            ctx.lineWidth = Math.max(1.5, S(4));
+            ctx.beginPath();
+            ctx.moveTo(X(70), Y(40));
+            ctx.lineTo(X(126), Y(40));
+            ctx.lineTo(X(150), Y(45));
+            ctx.lineTo(X(190), Y(50));
+            ctx.lineTo(X(230), Y(45));
+            ctx.lineTo(X(254), Y(42));
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(X(72), Y(50));
+            ctx.lineTo(X(140), Y(54));
+            ctx.lineTo(X(192), Y(58));
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 1;
+
+            // CPU die, one quadrant per core.
+            const q = r.cores;
+            for (let i = 0; i < Math.min(q.length, 4); i++) {
+                const rgb = heatRgb(q[i]);
+                ctx.fillStyle = "rgba(" + rgb[0] + "," + rgb[1] + ","
+                    + rgb[2] + ",0.45)";
+                ctx.fillRect(X(129 + (i % 2) * 11),
+                    Y(34 + Math.floor(i / 2) * 11), S(11), S(11));
             }
+            ctx.strokeStyle = Theme.red;
+            ctx.strokeRect(X(129), Y(34), S(22), S(22));
 
-            function roundedPath(ctx, x, y, w, h, r) {
+            // MX450 die.
+            ctx.strokeRect(X(184), Y(42), S(16), S(16));
+
+            // Soldered LPDDR4X beside the package.
+            ctx.strokeStyle = Theme.redDim;
+            ctx.globalAlpha = 0.8;
+            ctx.strokeRect(X(104), Y(62), S(14), S(9));
+            ctx.strokeRect(X(104), Y(74), S(14), S(9));
+            ctx.globalAlpha = 1;
+
+            // M.2 SSD with its connector notch.
+            ctx.strokeStyle = Theme.red;
+            ctx.strokeRect(X(35), Y(95), S(80), S(12));
+            ctx.beginPath();
+            ctx.moveTo(X(41), Y(95));
+            ctx.lineTo(X(41), Y(107));
+            ctx.stroke();
+
+            // Wi-Fi module.
+            ctx.strokeRect(X(242), Y(67), S(16), S(14));
+
+            // Battery + speakers along the front edge.
+            ctx.strokeStyle = Theme.redDim;
+            ctx.globalAlpha = 0.7;
+            roundedPath(ctx, X(60), Y(120), S(204), S(85), S(6));
+            ctx.stroke();
+            roundedPath(ctx, X(20), Y(175), S(30), S(30), S(4));
+            ctx.stroke();
+            roundedPath(ctx, X(274), Y(175), S(30), S(30), S(4));
+            ctx.stroke();
+            for (let k = 0; k < 3; k++) {
                 ctx.beginPath();
-                ctx.moveTo(x + r, y);
-                ctx.arcTo(x + w, y, x + w, y + h, r);
-                ctx.arcTo(x + w, y + h, x, y + h, r);
-                ctx.arcTo(x, y + h, x, y, r);
-                ctx.arcTo(x, y, x + w, y, r);
-                ctx.closePath();
+                ctx.moveTo(X(26 + k * 7), Y(200));
+                ctx.lineTo(X(38 + k * 7), Y(181));
+                ctx.moveTo(X(280 + k * 7), Y(200));
+                ctx.lineTo(X(292 + k * 7), Y(181));
+                ctx.stroke();
             }
+            ctx.globalAlpha = 1;
+            ctx.font = "9px " + Theme.monoFamily;
+            ctx.fillStyle = Theme.textFaint;
+            ctx.textAlign = "center";
+            ctx.fillText("BATTERY", X(162), Y(166));
+            ctx.textAlign = "left";
 
-            function blob(ctx, x, y, r, c) {
-                if (c === null || c === undefined)
-                    return;
-                const rgb = heatRgb(c);
-                const a = 0.18
-                    + Math.max(0, Math.min((c - 30) / 60, 1)) * 0.55;
-                const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-                g.addColorStop(0, "rgba(" + rgb[0] + "," + rgb[1] + ","
-                    + rgb[2] + "," + a.toFixed(3) + ")");
-                g.addColorStop(1, "rgba(" + rgb[0] + "," + rgb[1] + ","
-                    + rgb[2] + ",0)");
-                ctx.fillStyle = g;
-                ctx.beginPath();
-                ctx.arc(x, y, r, 0, Math.PI * 2);
-                ctx.fill();
+            tag(ctx, X(129), Y(30), "CPU", r.pkg);
+            tag(ctx, X(184), Y(74), "MX450", root.gpuC,
+                { fallback: root.gpuDormant ? "DORMANT" : "—" });
+            tag(ctx, X(35), Y(91), "SSD", r.ssd);
+            tag(ctx, X(242), Y(63), "WIFI", r.wifi);
+            tag(ctx, X(20), Y(82), "BOARD", r.board);
+        }
+
+        // Generic side-view tower for machines this panel doesn't know.
+        function paintTower(ctx) {
+            const X = u => root.bx + u * root.bs;
+            const Y = v => root.by + v * root.bs;
+            const S = u => u * root.bs;
+            const r = root.readings;
+
+            ctx.save();
+            roundedPath(ctx, X(5), Y(5), S(430), S(390), S(8));
+            ctx.clip();
+            ctx.globalCompositeOperation = "lighter";
+            blob(ctx, X(252), Y(112), S(50), r.pkg);
+            blob(ctx, X(255), Y(237), S(46), root.gpuC);
+            blob(ctx, X(240), Y(275), S(30), r.ssd);
+            blob(ctx, X(341), Y(276), S(34), r.board);
+            blob(ctx, X(397), Y(306), S(24), r.wifi);
+            ctx.restore();
+
+            ctx.strokeStyle = Theme.redDim;
+            ctx.lineWidth = 1;
+            roundedPath(ctx, X(5), Y(5), S(430), S(390), S(8));
+            ctx.stroke();
+
+            // Motherboard region.
+            ctx.globalAlpha = 0.6;
+            roundedPath(ctx, X(170), Y(40), S(240), S(250), S(4));
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            fan(ctx, X(35), Y(120), S(26));
+            fan(ctx, X(35), Y(210), S(26));
+            fan(ctx, X(398), Y(80), S(26));
+
+            // CPU socket + cooler, one quadrant per core.
+            const q = r.cores;
+            for (let i = 0; i < Math.min(q.length, 4); i++) {
+                const rgb = heatRgb(q[i]);
+                ctx.fillStyle = "rgba(" + rgb[0] + "," + rgb[1] + ","
+                    + rgb[2] + ",0.45)";
+                ctx.fillRect(X(230 + (i % 2) * 22),
+                    Y(90 + Math.floor(i / 2) * 22), S(22), S(22));
             }
+            ctx.strokeStyle = Theme.redDim;
+            ctx.beginPath();
+            ctx.arc(X(252), Y(112), S(32), 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = Theme.red;
+            ctx.strokeRect(X(230), Y(90), S(44), S(44));
 
-            // "NAME 62°" label; the value tints with the shared warn
-            // scheme.
-            function tag(ctx, x, y, name, c, opts) {
-                opts = opts || {};
-                ctx.font = "9px " + Theme.monoFamily;
-                ctx.textAlign = "left";
-                const value = c === null || c === undefined
-                    ? (opts.fallback || "—") : c.toFixed(0) + "°";
-                const nameW = ctx.measureText(name + " ").width;
-                let sx = x;
-                if (opts.align === "center")
-                    sx = x - (nameW + ctx.measureText(value).width) / 2;
-                else if (opts.align === "right")
-                    sx = x - nameW - ctx.measureText(value).width;
-                ctx.fillStyle = Theme.textFaint;
-                ctx.fillText(name + " ", sx, y);
-                ctx.fillStyle = c === null || c === undefined
-                    ? Theme.textFaint
-                    : c >= 85 ? Theme.red
-                    : c >= 70 ? Theme.warnAmber : Theme.textMuted;
-                ctx.fillText(value, sx + nameW, y);
-            }
+            // RAM slots.
+            ctx.strokeStyle = Theme.redDim;
+            for (let k = 0; k < 4; k++)
+                ctx.strokeRect(X(310 + k * 14), Y(62), S(6), S(118));
 
-            function fan(ctx, x, y, r) {
-                ctx.strokeStyle = Theme.redDim;
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.arc(x, y, r, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(x, y, r * 0.22, 0, Math.PI * 2);
-                ctx.stroke();
-                for (let k = 0; k < 5; k++) {
-                    const a = k / 5 * Math.PI * 2;
-                    ctx.beginPath();
-                    ctx.moveTo(x + Math.cos(a) * r * 0.3,
-                        y + Math.sin(a) * r * 0.3);
-                    ctx.quadraticCurveTo(
-                        x + Math.cos(a + 0.5) * r * 0.72,
-                        y + Math.sin(a + 0.5) * r * 0.72,
-                        x + Math.cos(a + 0.9) * r * 0.95,
-                        y + Math.sin(a + 0.9) * r * 0.95);
-                    ctx.stroke();
-                }
-            }
+            // GPU card.
+            ctx.strokeStyle = Theme.red;
+            ctx.strokeRect(X(150), Y(220), S(220), S(34));
+            ctx.strokeStyle = Theme.redDim;
+            ctx.beginPath();
+            ctx.arc(X(210), Y(237), S(13), 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(X(290), Y(237), S(13), 0, Math.PI * 2);
+            ctx.stroke();
 
-            // Bottom-cover-off top view, hinge at the top. Board units are
-            // mm on the real 324x222 chassis.
-            function paintZenbook(ctx) {
-                const X = u => root.bx + u * root.bs;
-                const Y = v => root.by + v * root.bs;
-                const S = u => u * root.bs;
-                const r = root.readings;
+            // M.2, chipset, Wi-Fi.
+            ctx.strokeStyle = Theme.red;
+            ctx.strokeRect(X(200), Y(270), S(80), S(10));
+            ctx.strokeRect(X(330), Y(265), S(22), S(22));
+            ctx.strokeRect(X(390), Y(300), S(14), S(12));
 
-                // Heat blobs first, additive, clipped to the chassis.
-                ctx.save();
-                roundedPath(ctx, X(2), Y(2), S(320), S(218), S(10));
-                ctx.clip();
-                ctx.globalCompositeOperation = "lighter";
-                blob(ctx, X(165), Y(62), S(62), r.board);
-                blob(ctx, X(140), Y(45), S(52), r.pkg);
-                blob(ctx, X(192), Y(50), S(40), root.gpuC);
-                blob(ctx, X(75), Y(101), S(36), r.ssd);
-                blob(ctx, X(250), Y(74), S(28), r.wifi);
-                ctx.restore();
+            // PSU.
+            ctx.strokeStyle = Theme.redDim;
+            ctx.globalAlpha = 0.7;
+            roundedPath(ctx, X(20), Y(320), S(140), S(60), S(4));
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            fan(ctx, X(55), Y(350), S(22));
+            ctx.font = "9px " + Theme.monoFamily;
+            ctx.fillStyle = Theme.textFaint;
+            ctx.fillText("PSU", X(110), Y(354));
 
-                // Chassis + hinge stubs.
-                ctx.strokeStyle = Theme.redDim;
-                ctx.lineWidth = 1;
-                roundedPath(ctx, X(2), Y(2), S(320), S(218), S(10));
-                ctx.stroke();
-                ctx.globalAlpha = 0.5;
-                ctx.fillStyle = Theme.redDim;
-                ctx.fillRect(X(80), Y(2), S(44), S(5));
-                ctx.fillRect(X(200), Y(2), S(44), S(5));
+            tag(ctx, X(230), Y(84), "CPU", r.pkg);
+            tag(ctx, X(150), Y(214), "GPU", root.gpuC,
+                { fallback: root.gpuDormant ? "DORMANT" : "—" });
+            tag(ctx, X(200), Y(266), "SSD", r.ssd);
+            tag(ctx, X(330), Y(261), "BOARD", r.board,
+                { align: "right" });
+            tag(ctx, X(388), Y(296), "WIFI", r.wifi,
+                { align: "right" });
+        }
 
-                // Motherboard region under the ScreenPad.
-                ctx.globalAlpha = 0.6;
-                roundedPath(ctx, X(18), Y(12), S(288), S(74), S(4));
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-
-                fan(ctx, X(45), Y(45), S(30));
-                fan(ctx, X(279), Y(45), S(30));
-
-                // Heat pipe run: left fan -> CPU -> MX450 -> right fan.
-                ctx.strokeStyle = Theme.redDim;
-                ctx.globalAlpha = 0.8;
-                ctx.lineWidth = Math.max(1.5, S(4));
-                ctx.beginPath();
-                ctx.moveTo(X(70), Y(40));
-                ctx.lineTo(X(126), Y(40));
-                ctx.lineTo(X(150), Y(45));
-                ctx.lineTo(X(190), Y(50));
-                ctx.lineTo(X(230), Y(45));
-                ctx.lineTo(X(254), Y(42));
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(X(72), Y(50));
-                ctx.lineTo(X(140), Y(54));
-                ctx.lineTo(X(192), Y(58));
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-                ctx.lineWidth = 1;
-
-                // CPU die, one quadrant per core.
-                const q = r.cores;
-                for (let i = 0; i < Math.min(q.length, 4); i++) {
-                    const rgb = heatRgb(q[i]);
-                    ctx.fillStyle = "rgba(" + rgb[0] + "," + rgb[1] + ","
-                        + rgb[2] + ",0.45)";
-                    ctx.fillRect(X(129 + (i % 2) * 11),
-                        Y(34 + Math.floor(i / 2) * 11), S(11), S(11));
-                }
-                ctx.strokeStyle = Theme.red;
-                ctx.strokeRect(X(129), Y(34), S(22), S(22));
-
-                // MX450 die.
-                ctx.strokeRect(X(184), Y(42), S(16), S(16));
-
-                // Soldered LPDDR4X beside the package.
-                ctx.strokeStyle = Theme.redDim;
-                ctx.globalAlpha = 0.8;
-                ctx.strokeRect(X(104), Y(62), S(14), S(9));
-                ctx.strokeRect(X(104), Y(74), S(14), S(9));
-                ctx.globalAlpha = 1;
-
-                // M.2 SSD with its connector notch.
-                ctx.strokeStyle = Theme.red;
-                ctx.strokeRect(X(35), Y(95), S(80), S(12));
-                ctx.beginPath();
-                ctx.moveTo(X(41), Y(95));
-                ctx.lineTo(X(41), Y(107));
-                ctx.stroke();
-
-                // Wi-Fi module.
-                ctx.strokeRect(X(242), Y(67), S(16), S(14));
-
-                // Battery + speakers along the front edge.
-                ctx.strokeStyle = Theme.redDim;
-                ctx.globalAlpha = 0.7;
-                roundedPath(ctx, X(60), Y(120), S(204), S(85), S(6));
-                ctx.stroke();
-                roundedPath(ctx, X(20), Y(175), S(30), S(30), S(4));
-                ctx.stroke();
-                roundedPath(ctx, X(274), Y(175), S(30), S(30), S(4));
-                ctx.stroke();
-                for (let k = 0; k < 3; k++) {
-                    ctx.beginPath();
-                    ctx.moveTo(X(26 + k * 7), Y(200));
-                    ctx.lineTo(X(38 + k * 7), Y(181));
-                    ctx.moveTo(X(280 + k * 7), Y(200));
-                    ctx.lineTo(X(292 + k * 7), Y(181));
-                    ctx.stroke();
-                }
-                ctx.globalAlpha = 1;
+        onPaint: {
+            const ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+            if (!Sampler.alive || Sampler.temps.length === 0) {
                 ctx.font = "9px " + Theme.monoFamily;
                 ctx.fillStyle = Theme.textFaint;
                 ctx.textAlign = "center";
-                ctx.fillText("BATTERY", X(162), Y(166));
+                ctx.fillText("NO TELEMETRY", width / 2, height / 2);
                 ctx.textAlign = "left";
-
-                tag(ctx, X(129), Y(30), "CPU", r.pkg);
-                tag(ctx, X(184), Y(74), "MX450", root.gpuC,
-                    { fallback: root.gpuDormant ? "DORMANT" : "—" });
-                tag(ctx, X(35), Y(91), "SSD", r.ssd);
-                tag(ctx, X(242), Y(63), "WIFI", r.wifi);
-                tag(ctx, X(20), Y(82), "BOARD", r.board);
+                return;
             }
-
-            // Generic side-view tower for machines this panel doesn't
-            // know.
-            function paintTower(ctx) {
-                const X = u => root.bx + u * root.bs;
-                const Y = v => root.by + v * root.bs;
-                const S = u => u * root.bs;
-                const r = root.readings;
-
-                ctx.save();
-                roundedPath(ctx, X(5), Y(5), S(430), S(390), S(8));
-                ctx.clip();
-                ctx.globalCompositeOperation = "lighter";
-                blob(ctx, X(252), Y(112), S(50), r.pkg);
-                blob(ctx, X(255), Y(237), S(46), root.gpuC);
-                blob(ctx, X(240), Y(275), S(30), r.ssd);
-                blob(ctx, X(341), Y(276), S(34), r.board);
-                blob(ctx, X(397), Y(306), S(24), r.wifi);
-                ctx.restore();
-
-                ctx.strokeStyle = Theme.redDim;
-                ctx.lineWidth = 1;
-                roundedPath(ctx, X(5), Y(5), S(430), S(390), S(8));
-                ctx.stroke();
-
-                // Motherboard region.
-                ctx.globalAlpha = 0.6;
-                roundedPath(ctx, X(170), Y(40), S(240), S(250), S(4));
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-
-                fan(ctx, X(35), Y(120), S(26));
-                fan(ctx, X(35), Y(210), S(26));
-                fan(ctx, X(398), Y(80), S(26));
-
-                // CPU socket + cooler, one quadrant per core.
-                const q = r.cores;
-                for (let i = 0; i < Math.min(q.length, 4); i++) {
-                    const rgb = heatRgb(q[i]);
-                    ctx.fillStyle = "rgba(" + rgb[0] + "," + rgb[1] + ","
-                        + rgb[2] + ",0.45)";
-                    ctx.fillRect(X(230 + (i % 2) * 22),
-                        Y(90 + Math.floor(i / 2) * 22), S(22), S(22));
-                }
-                ctx.strokeStyle = Theme.redDim;
-                ctx.beginPath();
-                ctx.arc(X(252), Y(112), S(32), 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.strokeStyle = Theme.red;
-                ctx.strokeRect(X(230), Y(90), S(44), S(44));
-
-                // RAM slots.
-                ctx.strokeStyle = Theme.redDim;
-                for (let k = 0; k < 4; k++)
-                    ctx.strokeRect(X(310 + k * 14), Y(62), S(6), S(118));
-
-                // GPU card.
-                ctx.strokeStyle = Theme.red;
-                ctx.strokeRect(X(150), Y(220), S(220), S(34));
-                ctx.strokeStyle = Theme.redDim;
-                ctx.beginPath();
-                ctx.arc(X(210), Y(237), S(13), 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(X(290), Y(237), S(13), 0, Math.PI * 2);
-                ctx.stroke();
-
-                // M.2, chipset, Wi-Fi.
-                ctx.strokeStyle = Theme.red;
-                ctx.strokeRect(X(200), Y(270), S(80), S(10));
-                ctx.strokeRect(X(330), Y(265), S(22), S(22));
-                ctx.strokeRect(X(390), Y(300), S(14), S(12));
-
-                // PSU.
-                ctx.strokeStyle = Theme.redDim;
-                ctx.globalAlpha = 0.7;
-                roundedPath(ctx, X(20), Y(320), S(140), S(60), S(4));
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-                fan(ctx, X(55), Y(350), S(22));
-                ctx.font = "9px " + Theme.monoFamily;
-                ctx.fillStyle = Theme.textFaint;
-                ctx.fillText("PSU", X(110), Y(354));
-
-                tag(ctx, X(230), Y(84), "CPU", r.pkg);
-                tag(ctx, X(150), Y(214), "GPU", root.gpuC,
-                    { fallback: root.gpuDormant ? "DORMANT" : "—" });
-                tag(ctx, X(200), Y(266), "SSD", r.ssd);
-                tag(ctx, X(330), Y(261), "BOARD", r.board,
-                    { align: "right" });
-                tag(ctx, X(388), Y(296), "WIFI", r.wifi,
-                    { align: "right" });
-            }
-
-            onPaint: {
-                const ctx = getContext("2d");
-                ctx.clearRect(0, 0, width, height);
-                if (!Sampler.alive || Sampler.temps.length === 0) {
-                    ctx.font = "9px " + Theme.monoFamily;
-                    ctx.fillStyle = Theme.textFaint;
-                    ctx.textAlign = "center";
-                    ctx.fillText("NO TELEMETRY", width / 2, height / 2);
-                    ctx.textAlign = "left";
-                    return;
-                }
-                if (root.zenbook)
-                    paintZenbook(ctx);
-                else
-                    paintTower(ctx);
-            }
+            if (root.zenbook)
+                paintZenbook(ctx);
+            else
+                paintTower(ctx);
         }
     }
 
-    Row {
-        id: strip
+    Repeater {
+        model: root.zones
 
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: Math.min(130, parent.height * 0.2)
-        spacing: 10
+        Item {
+            x: root.bx + modelData.x * root.bs
+            y: root.by + modelData.y * root.bs
+            width: modelData.w * root.bs
+            height: modelData.h * root.bs
 
-        TempReadout {
-            id: roSsd
+            MouseArea {
+                id: zoneMouse
 
-            label: "SSD °C"
-            value: root.readings.ssd
-        }
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.zoneClicked(modelData.zone)
+            }
 
-        TempReadout {
-            id: roCpu
+            Rectangle {
+                anchors.fill: parent
+                visible: zoneMouse.containsMouse
+                color: "transparent"
+                border.width: 1
+                border.color: Theme.glow
+            }
 
-            label: "CPU °C"
-            value: root.readings.pkg
-        }
+            Rectangle {
+                visible: zoneMouse.containsMouse
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: modelData.chipBelow ? parent.bottom : undefined
+                anchors.bottom: modelData.chipBelow ? undefined : parent.top
+                anchors.topMargin: 4
+                anchors.bottomMargin: 4
+                width: chipLabel.implicitWidth + 12
+                height: 17
+                color: Theme.ground
+                border.width: 1
+                border.color: Theme.glow
 
-        TempReadout {
-            id: roBoard
+                Text {
+                    id: chipLabel
 
-            label: "BOARD °C"
-            value: root.readings.board
-        }
-
-        TempReadout {
-            id: roWifi
-
-            label: "WIFI °C"
-            value: root.readings.wifi
+                    anchors.centerIn: parent
+                    text: modelData.label
+                    font.family: Theme.monoFamily
+                    font.pixelSize: Theme.fontSize - 4
+                    color: Theme.glow
+                }
+            }
         }
     }
 }
