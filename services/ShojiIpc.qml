@@ -130,6 +130,32 @@ Singleton {
         root.updated();
     }
 
+    // Event-rate rect updates during drags/resizes: patch the existing
+    // entries in place (they're shared with `windows`) and re-emit.
+    function applyRects(payload) {
+        if (!payload || !payload.windows)
+            return;
+        const byId = {};
+        for (const w of root.windowList) {
+            if (w.id)
+                byId[w.id] = w;
+        }
+        let touched = false;
+        for (const u of payload.windows) {
+            const entry = byId[u.id];
+            if (!entry)
+                continue;
+            entry.x = u.x;
+            entry.y = u.y;
+            entry.width = u.width;
+            entry.height = u.height;
+            entry.dragTab = u.dragTab || null;
+            touched = true;
+        }
+        if (touched)
+            root.updated();
+    }
+
     Socket {
         id: socket
 
@@ -145,6 +171,8 @@ Singleton {
                 }
                 if (msg.event === "workspaces.changed")
                     root.applyView(msg.payload);
+                else if (msg.event === "windows.rects")
+                    root.applyRects(msg.payload);
                 else if (msg.id === root.geomRequestId
                         && msg.result !== undefined)
                     root.usableAreas = msg.result.usable || {};
