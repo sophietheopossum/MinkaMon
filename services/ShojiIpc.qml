@@ -24,9 +24,13 @@ Singleton {
     property var windowList: []
     // Monitors currently showing a fullscreen window (no lines there).
     property var fullscreenMonitors: []
+    // Usable (layer-exclusive-zone-free) area per monitor name, from
+    // debug.geometry — filled on requestGeometry().
+    property var usableAreas: ({})
     signal updated()
 
     property int nextId: 1
+    property int geomRequestId: -1
 
     readonly property string socketPath: {
         const dir = Quickshell.env("XDG_RUNTIME_DIR");
@@ -56,6 +60,35 @@ Singleton {
         socket.flush();
     }
 
+    function requestGeometry() {
+        if (!socket.connected)
+            return;
+        root.geomRequestId = root.nextId;
+        socket.write(JSON.stringify({
+            id: root.nextId++,
+            method: "debug.geometry",
+        }) + "\n");
+        socket.flush();
+    }
+
+    // Move/resize a window (layout coords, chrome-inclusive rect).
+    function setRect(windowId, x, y, width, height) {
+        if (!socket.connected)
+            return;
+        socket.write(JSON.stringify({
+            id: root.nextId++,
+            method: "windows.setRect",
+            params: {
+                windowId: windowId,
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+            },
+        }) + "\n");
+        socket.flush();
+    }
+
     function applyView(view) {
         if (!view || !view.monitors)
             return;
@@ -74,6 +107,7 @@ Singleton {
                             && fs.indexOf(mon.name) < 0)
                         fs.push(mon.name);
                     const entry = {
+                        id: w.id,
                         x: w.rect.x,
                         y: w.rect.y,
                         width: w.rect.width,
@@ -111,6 +145,9 @@ Singleton {
                 }
                 if (msg.event === "workspaces.changed")
                     root.applyView(msg.payload);
+                else if (msg.id === root.geomRequestId
+                        && msg.result !== undefined)
+                    root.usableAreas = msg.result.usable || {};
                 else if (msg.result !== undefined)
                     root.applyView(msg.result);
             }

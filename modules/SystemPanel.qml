@@ -85,23 +85,116 @@ Panel {
     // Clickable hardware, in board units. Order is z-order: the broad
     // board region sits first so the specific components on it win the
     // hover/click.
+    // Which click-target families are live (bound from the shell's INFO /
+    // TEMP toggles). A zone with nothing enabled to open hides entirely.
+    property bool showInfo: true
+    property bool showTemp: false
+
     readonly property var zones: zenbook ? [
-        { zone: "board", label: "▸ BOARD °C",
-            x: 18, y: 12, w: 288, h: 74, chipBelow: true },
-        { zone: "cpu", label: "▸ CPU", x: 124, y: 29, w: 32, h: 32 },
-        { zone: "gpu", label: "▸ GPU", x: 179, y: 37, w: 26, h: 26 },
-        { zone: "ram", label: "▸ MEMORY", x: 99, y: 57, w: 24, h: 31 },
-        { zone: "wifi", label: "▸ NETWORK", x: 237, y: 62, w: 26, h: 24 },
-        { zone: "ssd", label: "▸ SSD °C", x: 30, y: 90, w: 90, h: 22 },
+        { 
+            zone: "board",
+            tempLabel: "BOARD °C",
+            x: 18,
+            y: 12, 
+            w: 288,
+            h: 74, 
+            chipBelow: true
+        },
+        { 
+            zone: "cpu", 
+            infoLabel: "CPU",
+            tempLabel: "CPU °C",
+            x: 124,
+            y: 29,
+            w: 32,
+            h: 32 
+        },
+        {
+            zone: "gpu",
+            infoLabel: "GPU",
+            tempLabel: "GPU °C",
+            x: 179, 
+            y: 37,
+            w: 26,
+            h: 26
+        },
+        {
+            zone: "ram", 
+            infoLabel: "MEMORY",
+            x: 99,
+            y: 57, 
+            w: 24,
+            h: 31
+        },
+        { 
+            zone: "wifi", 
+            infoLabel: "NETWORK", 
+            tempLabel: "WIFI °C",
+            x: 237, 
+            y: 62, 
+            w: 26,
+            h: 24
+        },
+        {
+            zone: "ssd", 
+            tempLabel: "SSD °C",
+            x: 30,
+            y: 90,
+            w: 90, 
+            h: 22
+        },
     ] : [
-        { zone: "board", label: "▸ BOARD °C",
-            x: 170, y: 40, w: 240, h: 250, chipBelow: true },
-        { zone: "cpu", label: "▸ CPU", x: 225, y: 85, w: 54, h: 54 },
-        { zone: "ram", label: "▸ MEMORY", x: 305, y: 57, w: 65, h: 128 },
-        { zone: "gpu", label: "▸ GPU", x: 145, y: 212, w: 230, h: 46 },
-        { zone: "ssd", label: "▸ SSD °C", x: 195, y: 263, w: 90, h: 20 },
-        { zone: "wifi", label: "▸ NETWORK",
-            x: 383, y: 294, w: 26, h: 22 },
+        {
+            zone: "board",
+            tempLabel: "BOARD °C",
+            x: 170, 
+            y: 40,
+            w: 240, 
+            h: 250, 
+            chipBelow: true 
+        },
+        { 
+            zone: "cpu", 
+            infoLabel: "CPU", 
+            tempLabel: "CPU °C",
+            x: 225,
+            y: 85, 
+            w: 54,
+            h: 54
+        },
+        {
+            zone: "ram", 
+            infoLabel: "MEMORY",
+            x: 305,
+            y: 57, 
+            w: 65,
+            h: 128
+        },
+        {
+            zone: "gpu",
+            infoLabel: "GPU", 
+            tempLabel: "GPU °C",
+            x: 145, 
+            y: 212,
+            w: 230,
+            h: 46
+        },
+        {
+            zone: "ssd",
+            tempLabel: "SSD °C",
+            x: 195, 
+            y: 263,
+            w: 90, 
+            h: 20 
+        },
+        {
+            zone: "wifi", infoLabel: "NETWORK",
+            tempLabel: "WIFI °C",
+            x: 383,
+            y: 294,
+            w: 26, 
+            h: 22
+        },
     ]
 
     // Scene-space (window-local) centre of a component, for the
@@ -473,6 +566,18 @@ Panel {
             y: root.by + modelData.y * root.bs
             width: modelData.w * root.bs
             height: modelData.h * root.bs
+            visible: chipText !== ""
+
+            // The chip names exactly what a click will open under the
+            // current INFO/TEMP toggles; empty means the zone is inert.
+            readonly property string chipText: {
+                const parts = [];
+                if (root.showInfo && modelData.infoLabel)
+                    parts.push(modelData.infoLabel);
+                if (root.showTemp && modelData.tempLabel)
+                    parts.push(modelData.tempLabel);
+                return parts.length ? "▸ " + parts.join(" + ") : "";
+            }
 
             MouseArea {
                 id: zoneMouse
@@ -508,7 +613,7 @@ Panel {
                     id: chipLabel
 
                     anchors.centerIn: parent
-                    text: modelData.label
+                    text: parent.parent.chipText
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 4
                     color: Theme.glow

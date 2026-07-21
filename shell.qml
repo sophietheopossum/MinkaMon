@@ -12,24 +12,128 @@ import "modules"
 ShellRoot {
     id: shellRoot
 
+    // What a zone click opens: its info panels, its temperature graph, or
+    // both. Info only on launch.
+    property bool infoMode: true
+    property bool tempMode: false
+    property bool overviewPending: false
+
     function openZone(zone) {
-        if (zone === "cpu")
-            cpuWin.visible = true;
-        else if (zone === "gpu")
-            gpuWin.visible = true;
-        else if (zone === "ram")
-            memWin.visible = true;
-        else if (zone === "wifi") {
-            // The user decides which of the network trio stays open.
-            netWin.visible = true;
-            globeWin.visible = true;
-            wifiTempWin.visible = true;
-        } else if (zone === "ssd")
-            ssdTempWin.visible = true;
-        else if (zone === "board")
-            boardTempWin.visible = true;
-        else if (zone === "processes")
+        if (zone === "cpu") {
+            if (infoMode)
+                cpuWin.visible = true;
+            if (tempMode)
+                cpuTempWin.visible = true;
+        } else if (zone === "gpu") {
+            if (infoMode)
+                gpuWin.visible = true;
+            if (tempMode)
+                gpuTempWin.visible = true;
+        } else if (zone === "ram") {
+            if (infoMode)
+                memWin.visible = true;
+        } else if (zone === "wifi") {
+            // The user decides which of the network windows stays open.
+            if (infoMode) {
+                netWin.visible = true;
+                globeWin.visible = true;
+            }
+            if (tempMode)
+                wifiTempWin.visible = true;
+        } else if (zone === "ssd") {
+            if (tempMode)
+                ssdTempWin.visible = true;
+        } else if (zone === "board") {
+            if (tempMode)
+                boardTempWin.visible = true;
+        } else if (zone === "processes")
             procWin.visible = true;
+    }
+
+    // Full overview: open the 0.4.0 monitor-page set and arrange the real
+    // windows into its grid (CPU/GPU/NET left column, schematic centre,
+    // MEMORY + GLOBE right) via the compositor's windows.setRect.
+    function fullOverview() {
+        cpuWin.visible = true;
+        gpuWin.visible = true;
+        netWin.visible = true;
+        memWin.visible = true;
+        globeWin.visible = true;
+        overviewPending = true;
+        overviewTimeout.restart();
+        ShojiIpc.requestGeometry();
+        tryArrangeOverview();
+    }
+
+    function tryArrangeOverview() {
+        if (!overviewPending)
+            return;
+        const wins = ShojiIpc.windows;
+        const names = ["MinkaMon", "MinkaMon // CPU", "MinkaMon // GPU",
+            "MinkaMon // NETWORK", "MinkaMon // MEMORY",
+            "MinkaMon // GLOBE"];
+        for (const n of names) {
+            // Freshly-opened windows take a beat to appear in the WM view;
+            // retry on the next geometry update until they're all there.
+            if (!wins[n] || !wins[n].id)
+                return;
+        }
+        const usable = ShojiIpc.usableAreas[wins["MinkaMon"].monitor];
+        if (!usable) {
+            ShojiIpc.requestGeometry();
+            return;
+        }
+        overviewPending = false;
+        overviewTimeout.stop();
+
+        // 0.4.0 MonitorPage proportions over the usable area. Cells are
+        // inflated by the chrome inset so the *visible* window borders sit
+        // on the grid, halos overlapping harmlessly in the gutters.
+        const pad = 10, chrome = 14;
+        const W = usable.width, H = usable.height;
+        const colLeft = W * 0.32;
+        const colRight = W * 0.30;
+        const colMid = W - colLeft - colRight - pad * 4;
+        const cpuH = (H - pad * 4) * 0.4;
+        const gpuH = (H - pad * 4) * 0.32;
+        const memH = (H - pad * 3) * 0.42;
+        const place = (title, x, y, w, h) => {
+            ShojiIpc.setRect(wins[title].id,
+                Math.round(usable.x + x - chrome),
+                Math.round(usable.y + y - chrome),
+                Math.round(w + chrome * 2),
+                Math.round(h + chrome * 2));
+        };
+        place("MinkaMon // CPU", pad, pad, colLeft, cpuH);
+        place("MinkaMon // GPU", pad, pad * 2 + cpuH, colLeft, gpuH);
+        place("MinkaMon // NETWORK", pad, pad * 3 + cpuH + gpuH,
+            colLeft, H - cpuH - gpuH - pad * 4);
+        place("MinkaMon", colLeft + pad * 2, pad, colMid, H - pad * 2);
+        place("MinkaMon // MEMORY", W - colRight - pad, pad,
+            colRight, memH);
+        place("MinkaMon // GLOBE", W - colRight - pad, pad * 2 + memH,
+            colRight, H - memH - pad * 3);
+    }
+
+    // Give freshly-opened windows a bounded window to appear in the WM
+    // view; past that, stop retrying quietly.
+    Timer {
+        id: overviewTimeout
+
+        interval: 4000
+        onTriggered: shellRoot.overviewPending = false
+    }
+
+    Connections {
+        target: ShojiIpc
+
+        function onUpdated() {
+            shellRoot.tryArrangeOverview();
+        }
+
+        function onUsableAreasChanged() {
+            shellRoot.tryArrangeOverview();
+        }
     }
 
     // Debug hooks: qs -p <dir> ipc call debug shot /path.png
@@ -43,6 +147,37 @@ ShellRoot {
 
         function open(name: string): void {
             shellRoot.openZone(name);
+        }
+    }
+
+    component TopChip: Rectangle {
+        id: chip
+
+        property string label
+        property bool active: false
+        signal clicked()
+
+        width: chipText.implicitWidth + 26
+        height: 28
+        radius: 5
+        color: active ? Theme.surfaceRaised : "transparent"
+        border.width: 1
+        border.color: active ? Theme.red : Theme.line
+
+        Text {
+            id: chipText
+
+            anchors.centerIn: parent
+            text: chip.label
+            font.family: Theme.monoFamily
+            font.pixelSize: Theme.fontSize - 1
+            font.letterSpacing: 2
+            color: chip.active ? Theme.text : Theme.textMuted
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: chip.clicked()
         }
     }
 
@@ -185,32 +320,33 @@ ShellRoot {
                     }
                 }
 
-                Rectangle {
+                Row {
                     anchors.right: parent.right
                     anchors.rightMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
-                    width: procLabel.implicitWidth + 26
-                    height: 28
-                    radius: 5
-                    color: procWin.visible
-                        ? Theme.surfaceRaised : "transparent"
-                    border.width: 1
-                    border.color: procWin.visible ? Theme.red : Theme.line
+                    spacing: 6
 
-                    Text {
-                        id: procLabel
-
-                        anchors.centerIn: parent
-                        text: "PROCESSES"
-                        font.family: Theme.monoFamily
-                        font.pixelSize: Theme.fontSize - 1
-                        font.letterSpacing: 2
-                        color: procWin.visible
-                            ? Theme.text : Theme.textMuted
+                    TopChip {
+                        label: "INFO"
+                        active: shellRoot.infoMode
+                        onClicked: shellRoot.infoMode = !shellRoot.infoMode
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
+                    TopChip {
+                        label: "TEMP"
+                        active: shellRoot.tempMode
+                        onClicked: shellRoot.tempMode = !shellRoot.tempMode
+                    }
+
+                    TopChip {
+                        label: "OVERVIEW"
+                        active: shellRoot.overviewPending
+                        onClicked: shellRoot.fullOverview()
+                    }
+
+                    TopChip {
+                        label: "PROCESSES"
+                        active: procWin.visible
                         onClicked: procWin.visible = !procWin.visible
                     }
                 }
@@ -223,6 +359,8 @@ ShellRoot {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.margins: 10
+                showInfo: shellRoot.infoMode
+                showTemp: shellRoot.tempMode
                 onZoneClicked: zone => shellRoot.openZone(zone)
             }
         }
@@ -327,6 +465,20 @@ ShellRoot {
         value: sysPanel.readings.wifi
     }
 
+    TempSatellite {
+        id: cpuTempWin
+
+        label: "CPU °C"
+        value: sysPanel.readings.pkg
+    }
+
+    TempSatellite {
+        id: gpuTempWin
+
+        label: "GPU °C"
+        value: sysPanel.gpuC
+    }
+
     // The ShojiWM IPC only needs to stream window geometry while a leader
     // line could actually draw: main window plus at least one satellite.
     Binding {
@@ -335,7 +487,8 @@ ShellRoot {
         value: win.visible && (cpuWin.visible || gpuWin.visible
             || memWin.visible || netWin.visible || globeWin.visible
             || procWin.visible || ssdTempWin.visible
-            || boardTempWin.visible || wifiTempWin.visible)
+            || boardTempWin.visible || wifiTempWin.visible
+            || cpuTempWin.visible || gpuTempWin.visible)
     }
 
     // Leader lines from schematic components to satellite window borders,
@@ -354,6 +507,14 @@ ShellRoot {
                 { title: "MinkaMon // WIFI °C", zone: "wifi" },
                 { title: "MinkaMon // SSD °C", zone: "ssd" },
                 { title: "MinkaMon // BOARD °C", zone: "board" },
+                { 
+                    title: "MinkaMon // CPU °C",
+                    zone: "cpu",
+                },
+                {
+                    title: "MinkaMon // GPU °C", 
+                    zone: "gpu",
+                },
                 { title: "MinkaMon // PROCESSES", zone: "cpu" },
             ]
         }
