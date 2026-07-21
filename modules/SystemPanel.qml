@@ -104,6 +104,18 @@ Panel {
             x: 383, y: 294, w: 26, h: 22 },
     ]
 
+    // Scene-space (window-local) centre of a component, for the
+    // cross-window leader-line overlay.
+    function anchorScene(zone) {
+        for (const z of zones) {
+            if (z.zone === zone)
+                return map.mapToItem(null,
+                    bx + (z.x + z.w / 2) * bs,
+                    by + (z.y + z.h / 2) * bs);
+        }
+        return null;
+    }
+
     Canvas {
         id: map
 

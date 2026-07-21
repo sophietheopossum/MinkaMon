@@ -321,4 +321,36 @@ ShellRoot {
         label: "WIFI °C"
         value: sysPanel.readings.wifi
     }
+
+    // The ShojiWM IPC only needs to stream window geometry while a leader
+    // line could actually draw: main window plus at least one satellite.
+    Binding {
+        target: ShojiIpc
+        property: "active"
+        value: win.visible && (cpuWin.visible || gpuWin.visible
+            || memWin.visible || netWin.visible || globeWin.visible
+            || procWin.visible || ssdTempWin.visible
+            || boardTempWin.visible || wifiTempWin.visible)
+    }
+
+    // Leader lines from schematic components to satellite window borders,
+    // one click-through overlay per screen.
+    Variants {
+        model: Quickshell.screens
+
+        LeaderOverlay {
+            systemPanel: sysPanel
+            ties: [
+                { title: "MinkaMon // CPU", zone: "cpu" },
+                { title: "MinkaMon // GPU", zone: "gpu" },
+                { title: "MinkaMon // MEMORY", zone: "ram" },
+                { title: "MinkaMon // NETWORK", zone: "wifi" },
+                { title: "MinkaMon // GLOBE", zone: "wifi" },
+                { title: "MinkaMon // WIFI °C", zone: "wifi" },
+                { title: "MinkaMon // SSD °C", zone: "ssd" },
+                { title: "MinkaMon // BOARD °C", zone: "board" },
+                { title: "MinkaMon // PROCESSES", zone: "cpu" },
+            ]
+        }
+    }
 }

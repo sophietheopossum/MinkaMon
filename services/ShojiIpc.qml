@@ -19,6 +19,9 @@ Singleton {
     // { x, y, width, height, focused, lastFocusedAt, fullscreen,
     //   minimized, monitor }
     property var windows: ({})
+    // Every such window, including title collisions the map would swallow
+    // (matters for occlusion checks). Entries are shared with `windows`.
+    property var windowList: []
     // Monitors currently showing a fullscreen window (no lines there).
     property var fullscreenMonitors: []
     signal updated()
@@ -37,6 +40,7 @@ Singleton {
         else if (!active) {
             socket.connected = false;
             windows = {};
+            windowList = [];
             fullscreenMonitors = [];
             updated();
         }
@@ -56,6 +60,7 @@ Singleton {
         if (!view || !view.monitors)
             return;
         const map = {};
+        const list = [];
         const fs = [];
         for (const mon of view.monitors) {
             for (const ws of mon.workspaces) {
@@ -68,7 +73,7 @@ Singleton {
                     if (w.fullscreen && !w.minimized
                             && fs.indexOf(mon.name) < 0)
                         fs.push(mon.name);
-                    map[w.title] = {
+                    const entry = {
                         x: w.rect.x,
                         y: w.rect.y,
                         width: w.rect.width,
@@ -79,10 +84,13 @@ Singleton {
                         minimized: w.minimized === true,
                         monitor: mon.name,
                     };
+                    map[w.title] = entry;
+                    list.push(entry);
                 }
             }
         }
         root.windows = map;
+        root.windowList = list;
         root.fullscreenMonitors = fs;
         root.updated();
     }
