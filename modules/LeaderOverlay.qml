@@ -20,6 +20,13 @@ PanelWindow {
     // [{ title, zone }]
     property var ties: []
 
+    // ShojiWM window rects include invisible chrome: a 14px edge-drag halo
+    // ring, then the 2px window border, then the client surface. Lines
+    // attach to (and clip against) the visible border, not the halo; the
+    // schematic anchor lives in client-surface coordinates.
+    readonly property real chromeInset: 14
+    readonly property real clientInset: 16
+
     // [{ ax, ay, bx, by, spans: [[t0, t1], ...] }] in layout coords
     property var lines: []
 
@@ -96,6 +103,12 @@ PanelWindow {
         const sys = systemPanel;
         if (ShojiIpc.active && main && !main.minimized && sys) {
             const all = ShojiIpc.windowList;
+            const inset = r => ({
+                x: r.x + chromeInset,
+                y: r.y + chromeInset,
+                width: r.width - chromeInset * 2,
+                height: r.height - chromeInset * 2,
+            });
             for (const tie of ties) {
                 const sat = wins[tie.title];
                 if (!sat || sat.minimized)
@@ -107,30 +120,45 @@ PanelWindow {
                 const a = sys.anchorScene(tie.zone);
                 if (!a)
                     continue;
-                const ax = main.x + a.x, ay = main.y + a.y;
-                // Attach to the satellite border: first intersection of
-                // the anchor->centre segment with the window rect. An
-                // anchor inside the satellite means overlap — no line.
-                const cx = sat.x + sat.width / 2;
-                const cy = sat.y + sat.height / 2;
-                const hit = segRectInterval(ax, ay, cx, cy, sat);
+                const ax = main.x + clientInset + a.x;
+                const ay = main.y + clientInset + a.y;
+                // Attach to the satellite's visible red border: first
+                // intersection of the anchor->centre segment with the
+                // chrome-inset rect. An anchor inside it means overlap —
+                // no line.
+                const satVis = inset(sat);
+                const cx = satVis.x + satVis.width / 2;
+                const cy = satVis.y + satVis.height / 2;
+                const hit = segRectInterval(ax, ay, cx, cy, satVis);
                 if (!hit || hit[0] <= 0)
                     continue;
                 const ex = ax + (cx - ax) * hit[0];
                 const ey = ay + (cy - ay) * hit[0];
                 // Occluders: anything stacked above both endpoints
-                // (stacking approximated by focus recency).
+                // (stacking approximated by focus recency)
+                // clipped at their visible borders too...
                 const zref = Math.max(main.lastFocusedAt,
                     sat.lastFocusedAt);
                 const covered = [];
                 for (const w of all) {
-                    if (w === main || w === sat || w.minimized)
+                    if (w.minimized)
                         continue;
-                    if (w.lastFocusedAt <= zref)
-                        continue;
-                    const iv = segRectInterval(ax, ay, ex, ey, w);
-                    if (iv)
-                        covered.push(iv);
+                    if (w !== main && w !== sat
+                        && w.lastFocusedAt > zref) {
+                        const iv = segRectInterval(ax, ay, ex, ey,
+                            inset(w));
+                        if (iv)
+                            covered.push(iv);
+                    }
+                    // ...and every revealed drag tab sits above the
+                    // lines regardless of stacking — it's interactive
+                    // chrome, including on the endpoint windows.
+                    if (w.dragTab) {
+                        const iv = segRectInterval(ax, ay, ex, ey,
+                            w.dragTab);
+                        if (iv)
+                            covered.push(iv);
+                    }
                 }
                 const spans = visibleSpans(covered);
                 if (spans.length)

@@ -83,6 +83,7 @@ Singleton {
                         fullscreen: w.fullscreen === true,
                         minimized: w.minimized === true,
                         monitor: mon.name,
+                        dragTab: w.dragTab || null,
                     };
                     map[w.title] = entry;
                     list.push(entry);
