@@ -56,6 +56,11 @@ ShellRoot {
         title: "MinkaMon // " + label
         color: Theme.ground
 
+        // A WM-side close fires `closed` but leaves `visible` true, which
+        // made reopening (visible = true) a no-op. Track reality so the
+        // next click remaps the window.
+        onClosed: visible = false
+
         Rectangle {
             anchors.fill: parent
             color: Theme.ground
