@@ -1,8 +1,11 @@
 import QtQuick
 import "../services"
 
-// Instrument grid: CPU/GPU/network down the left, globe centre-stage,
-// memory and thermal on the right.
+// Instrument grid:
+// CPU/GPU/network down the left
+// the machine schematic centre-stage
+// memory and the globe on the right
+// with leader lines wiring each panel to its component on the board.
 Item {
     id: root
 
@@ -28,13 +31,15 @@ Item {
     }
 
     NetworkPanel {
+        id: netPanel
         x: root.pad
         y: gpuPanel.y + gpuPanel.height + root.pad
         width: root.colLeft
         height: root.height - gpuPanel.y - gpuPanel.height - root.pad * 2
     }
 
-    GlobePanel {
+    SystemPanel {
+        id: systemPanel
         x: root.colLeft + root.pad * 2
         y: root.pad
         width: root.colMid
@@ -49,10 +54,21 @@ Item {
         height: (root.height - root.pad * 3) * 0.42
     }
 
-    TempsPanel {
+    GlobePanel {
         x: memPanel.x
         y: memPanel.y + memPanel.height + root.pad
         width: root.colRight
         height: root.height - memPanel.height - root.pad * 3
+    }
+
+    LeaderLines {
+        anchors.fill: parent
+        system: systemPanel
+        ties: [
+            { item: cpuPanel, at: 0.3, target: "cpu" },
+            { item: gpuPanel, at: 0.5, target: "gpu" },
+            { item: netPanel, at: 0.5, target: "wifi" },
+            { item: memPanel, at: 0.5, target: "ram" },
+        ]
     }
 }
