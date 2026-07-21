@@ -1,89 +1,132 @@
 import QtQuick
 import "../services"
 
-// Up/down rates with 60s sparklines, plus per-interface breakdown.
+// Up/down rates on top, per-interface breakdown
+// pinned to the bottom, and a single shared 60s chart between them: both directions overlaid on one
+// scale, colour-matched to the rate readouts (down red, up purple).
 Panel {
     id: root
 
     title: "NETWORK"
 
-    Column {
-        anchors.fill: parent
-        spacing: 6
+    // Both lines must share one scale or the overlay lies about which
+    // direction is busier.
+    readonly property real peak: {
+        let p = 1;
+        for (const v of Sampler.downHistory)
+            p = Math.max(p, v);
+        for (const v of Sampler.upHistory)
+            p = Math.max(p, v);
+        return p;
+    }
 
-        Row {
-            spacing: 20
+    Row {
+        id: rates
 
-            Column {
-                spacing: 1
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        spacing: 20
 
-                Text {
-                    text: "▼ DOWN"
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontSize - 3
-                    font.letterSpacing: 1
-                    color: Theme.textFaint
-                }
+        Column {
+            spacing: 1
 
-                Text {
-                    text: Sampler.fmtBytes(Sampler.net.downBps)
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontSize + 1
-                    color: Theme.glow
-                }
+            Text {
+                text: "▼ DOWN"
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize - 3
+                font.letterSpacing: 1
+                color: Theme.textFaint
             }
 
-            Column {
-                spacing: 1
-
-                Text {
-                    text: "▲ UP"
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontSize - 3
-                    font.letterSpacing: 1
-                    color: Theme.textFaint
-                }
-
-                Text {
-                    text: Sampler.fmtBytes(Sampler.net.upBps)
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontSize + 1
-                    color: Theme.purple
-                }
+            Text {
+                text: Sampler.fmtBytes(Sampler.net.downBps)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize + 1
+                color: Theme.glow
             }
         }
 
+        Column {
+            spacing: 1
+
+            Text {
+                text: "▲ UP"
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize - 3
+                font.letterSpacing: 1
+                color: Theme.textFaint
+            }
+
+            Text {
+                text: Sampler.fmtBytes(Sampler.net.upBps)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize + 1
+                color: Theme.purple
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.top: rates.bottom
+        anchors.topMargin: 6
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: ifaceList.top
+        anchors.bottomMargin: 6
+        color: Theme.surfaceRaised
+
         Sparkline {
-            width: parent.width
-            height: 34
+            anchors.fill: parent
+            anchors.margins: 1
             values: Sampler.downHistory
+            maxValue: root.peak
             lineColor: Theme.glow
             fillColor: Theme.gaugeDim
         }
 
+        // Line-only on top of the filled down series, so the overlap stays
+        // readable.
         Sparkline {
-            width: parent.width
-            height: 34
+            anchors.fill: parent
+            anchors.margins: 1
             values: Sampler.upHistory
+            maxValue: root.peak
             lineColor: Theme.purple
-            fillColor: "#231a2e"
+            fillColor: "transparent"
         }
 
-        Column {
-            spacing: 2
+        Text {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 3
+            text: "TRAFFIC"
+            font.family: Theme.monoFamily
+            font.pixelSize: Theme.fontSize - 4
+            font.letterSpacing: 1
+            color: Theme.textFaint
+        }
+    }
 
-            Repeater {
-                model: Object.keys(Sampler.net.ifaces)
+    Column {
+        id: ifaceList
 
-                Text {
-                    text: modelData + "  ▼ "
-                        + Sampler.fmtBytes(Sampler.net.ifaces[modelData].downBps)
-                        + "  ▲ "
-                        + Sampler.fmtBytes(Sampler.net.ifaces[modelData].upBps)
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontSize - 3
-                    color: Theme.textFaint
-                }
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        spacing: 2
+
+        Repeater {
+            model: Object.keys(Sampler.net.ifaces)
+
+            Text {
+                text: modelData + "  ▼ "
+                    + Sampler.fmtBytes(Sampler.net.ifaces[modelData].downBps)
+                    + "  ▲ "
+                    + Sampler.fmtBytes(Sampler.net.ifaces[modelData].upBps)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize - 3
+                color: Theme.textFaint
             }
         }
     }
