@@ -35,8 +35,15 @@ Item {
     // comm → resolved icon source. /proc comms rarely match desktop entry ids
     // directly, so first try the basename of each entry's Exec line, then the
     // heuristic lookup, then prefix-match (comm is truncated to 15 chars).
-    property var iconCache: ({})
-    property var execMap: null
+    // Held in one readonly object mutated in place: Image source bindings call
+    // iconFor(), and a notifying property assignment mid-evaluation would be a
+    // binding loop.
+    readonly property var iconState: (
+        { 
+            cache: ({}), 
+            execMap: null,
+        }
+    )
 
     function buildExecMap() {
         const map = {};
@@ -60,22 +67,23 @@ Item {
     }
 
     function iconFor(comm) {
+        const state = iconState;
         const key = comm.toLowerCase();
-        const hit = iconCache[key];
+        const hit = state.cache[key];
         if (hit !== undefined)
             return hit;
-        if (execMap === null)
-            execMap = buildExecMap();
-        let icon = execMap[key] || "";
+        if (state.execMap === null)
+            state.execMap = buildExecMap();
+        let icon = state.execMap[key] || "";
         if (!icon) {
             const entry = DesktopEntries.heuristicLookup(comm);
             if (entry && entry.icon)
                 icon = entry.icon;
         }
         if (!icon && comm.length === 15) {
-            for (const k in execMap) {
+            for (const k in state.execMap) {
                 if (k.startsWith(key)) {
-                    icon = execMap[k];
+                    icon = state.execMap[k];
                     break;
                 }
             }
@@ -83,7 +91,7 @@ Item {
         const src = icon
             ? Quickshell.iconPath(icon, "application-x-executable")
             : Quickshell.iconPath("application-x-executable");
-        iconCache[key] = src;
+        state.cache[key] = src;
         return src;
     }
 
@@ -224,7 +232,6 @@ Item {
                         width: 16
                         height: 16
                         sourceSize: Qt.size(32, 32)
-                        asynchronous: true
                         source: root.iconFor(modelData.comm)
                     }
 
