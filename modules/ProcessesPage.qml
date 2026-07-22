@@ -1,7 +1,9 @@
 import QtQuick
+import Quickshell
 import "../services"
 
 // Sortable process table. Column headers toggle sort key/direction.
+// Right-clicking a row opens a kill menu (SIGTERM / SIGKILL).
 Item {
     id: root
 
@@ -28,6 +30,79 @@ Item {
             sortKey = key;
             sortDesc = key !== "comm";
         }
+    }
+
+    // comm → resolved icon source. /proc comms rarely match desktop entry ids
+    // directly, so first try the basename of each entry's Exec line, then the
+    // heuristic lookup, then prefix-match (comm is truncated to 15 chars).
+    property var iconCache: ({})
+    property var execMap: null
+
+    function buildExecMap() {
+        const map = {};
+        const apps = DesktopEntries.applications.values;
+        for (let i = 0; i < apps.length; i++) {
+            const entry = apps[i];
+            if (!entry.icon)
+                continue;
+            const toks = (entry.execString || "").split(/\s+/);
+            for (const t of toks) {
+                if (!t || t === "env" || t.includes("=")
+                        || t.startsWith("-") || t.startsWith("%"))
+                    continue;
+                const base = t.split("/").pop().toLowerCase();
+                if (base && map[base] === undefined)
+                    map[base] = entry.icon;
+                break;
+            }
+        }
+        return map;
+    }
+
+    function iconFor(comm) {
+        const key = comm.toLowerCase();
+        const hit = iconCache[key];
+        if (hit !== undefined)
+            return hit;
+        if (execMap === null)
+            execMap = buildExecMap();
+        let icon = execMap[key] || "";
+        if (!icon) {
+            const entry = DesktopEntries.heuristicLookup(comm);
+            if (entry && entry.icon)
+                icon = entry.icon;
+        }
+        if (!icon && comm.length === 15) {
+            for (const k in execMap) {
+                if (k.startsWith(key)) {
+                    icon = execMap[k];
+                    break;
+                }
+            }
+        }
+        const src = icon
+            ? Quickshell.iconPath(icon, "application-x-executable")
+            : Quickshell.iconPath("application-x-executable");
+        iconCache[key] = src;
+        return src;
+    }
+
+    // Kill menu state. Snapshot pid/comm so the row churning out from under
+    // the menu on the next procs tick doesn't retarget it.
+    property var menuProc: null
+    property real menuX: 0
+    property real menuY: 0
+
+    function openMenu(proc, x, y) {
+        menuProc = { pid: proc.pid, comm: proc.comm };
+        menuX = Math.max(0, Math.min(x, width - killMenu.width - 4));
+        menuY = Math.max(0, Math.min(y, height - killMenu.height - 4));
+    }
+
+    function sendSignal(sig) {
+        if (menuProc)
+            Quickshell.execDetached(["kill", "-" + sig, String(menuProc.pid)]);
+        menuProc = null;
     }
 
     readonly property var columns: [
@@ -112,6 +187,15 @@ Item {
             height: 24
             color: index % 2 === 0 ? "transparent" : Theme.surface
 
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onPressed: mouse => {
+                    const p = mapToItem(root, mouse.x, mouse.y);
+                    root.openMenu(modelData, p.x, p.y);
+                }
+            }
+
             Row {
                 anchors.fill: parent
                 anchors.leftMargin: 12
@@ -129,16 +213,33 @@ Item {
                     color: Theme.textFaint
                 }
 
-                Text {
+                Item {
                     width: root.flexWidth()
                     height: parent.height
-                    leftPadding: 14
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                    text: modelData.comm
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontSize - 2
-                    color: Theme.text
+
+                    Image {
+                        id: procIcon
+                        x: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 16
+                        height: 16
+                        sourceSize: Qt.size(32, 32)
+                        asynchronous: true
+                        source: root.iconFor(modelData.comm)
+                    }
+
+                    Text {
+                        anchors.left: procIcon.right
+                        anchors.leftMargin: 8
+                        anchors.right: parent.right
+                        height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                        text: modelData.comm
+                        font.family: Theme.monoFamily
+                        font.pixelSize: Theme.fontSize - 2
+                        color: Theme.text
+                    }
                 }
 
                 Text {
@@ -173,6 +274,99 @@ Item {
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 2
                     color: Theme.textMuted
+                }
+            }
+        }
+    }
+
+    // Click-away catcher under the kill menu.
+    MouseArea {
+        anchors.fill: parent
+        visible: root.menuProc !== null
+        acceptedButtons: Qt.AllButtons
+        z: 10
+        onPressed: root.menuProc = null
+    }
+
+    Rectangle {
+        id: killMenu
+
+        visible: root.menuProc !== null
+        x: root.menuX
+        y: root.menuY
+        width: 190
+        height: menuColumn.height + 2
+        color: Theme.surfaceRaised
+        border.width: 1
+        border.color: Theme.line
+        z: 11
+
+        Column {
+            id: menuColumn
+
+            x: 1
+            y: 1
+            width: parent.width - 2
+
+            Rectangle {
+                width: menuColumn.width
+                height: 26
+                color: Theme.surface
+
+                Text {
+                    anchors.fill: parent
+                    leftPadding: 10
+                    rightPadding: 10
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    text: root.menuProc
+                        ? root.menuProc.comm + "  [" + root.menuProc.pid + "]" : ""
+                    font.family: Theme.monoFamily
+                    font.pixelSize: Theme.fontSize - 2
+                    color: Theme.textMuted
+                }
+            }
+
+            Repeater {
+                model: [
+                    { label: "TERMINATE", sig: "TERM", hint: "SIGTERM" },
+                    { label: "KILL", sig: "KILL", hint: "SIGKILL" },
+                ]
+
+                Rectangle {
+                    width: menuColumn.width
+                    height: 28
+                    color: optionArea.containsMouse ? Theme.redDim : "transparent"
+
+                    Text {
+                        anchors.fill: parent
+                        leftPadding: 10
+                        verticalAlignment: Text.AlignVCenter
+                        text: modelData.label
+                        font.family: Theme.monoFamily
+                        font.pixelSize: Theme.fontSize - 2
+                        font.letterSpacing: 1
+                        color: modelData.sig === "KILL" && !optionArea.containsMouse
+                            ? Theme.red : Theme.text
+                    }
+
+                    Text {
+                        anchors.fill: parent
+                        rightPadding: 10
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
+                        text: modelData.hint
+                        font.family: Theme.monoFamily
+                        font.pixelSize: Theme.fontSize - 3
+                        color: Theme.textFaint
+                    }
+
+                    MouseArea {
+                        id: optionArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.sendSignal(modelData.sig)
+                    }
                 }
             }
         }
