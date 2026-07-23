@@ -1,18 +1,21 @@
 pragma Singleton
 import Quickshell
-import Quickshell.Io
 import QtQuick
+// Through the config-root symlink: Quickshell only honours qmldir
+// singleton registration for paths inside the shell root.
+import "../MinkaLink"
 
-// NDJSON client for the ShojiWM IPC socket, used by the leader-line overlay
-// to learn where the compositor put MinkaMon's windows — Wayland itself
-// never tells a client. Window move/resize doesn't trigger a compositor
-// broadcast, so while `active` this polls workspaces.get; the payload is
-// tiny and the socket is local.
+// MinkaMon's window-geometry view of the ShojiWM IPC, layered on
+// MinkaLink's ShojiClient transport. Window move/resize doesn't trigger a
+// compositor broadcast, so while `active` this polls workspaces.get; the
+// payload is tiny and the socket is local.
+// Idle still means no socket traffic at all: `active` gates ShojiClient.wanted,
+// which drops the connection entirely.
 Singleton {
     id: root
 
     // Consumers flip this while they need geometry (main window plus at
-    // least one satellite open). Idle means no socket traffic at all.
+    // least one satellite open).
     property bool active: false
 
     // Windows on *active* workspaces only, keyed by title:
@@ -29,20 +32,9 @@ Singleton {
     property var usableAreas: ({})
     signal updated()
 
-    property int nextId: 1
-    property int geomRequestId: -1
-
-    readonly property string socketPath: {
-        const dir = Quickshell.env("XDG_RUNTIME_DIR");
-        const disp = Quickshell.env("WAYLAND_DISPLAY");
-        return dir && disp ? dir + "/shojiwm-" + disp + ".sock" : "";
-    }
-
     onActiveChanged: {
-        if (active && socketPath !== "")
-            socket.connected = true;
-        else if (!active) {
-            socket.connected = false;
+        ShojiClient.wanted = active;
+        if (!active) {
             windows = {};
             windowList = [];
             fullscreenMonitors = [];
@@ -51,42 +43,28 @@ Singleton {
     }
 
     function requestWindows() {
-        if (!socket.connected)
-            return;
-        socket.write(JSON.stringify({
-            id: root.nextId++,
-            method: "workspaces.get",
-        }) + "\n");
-        socket.flush();
+        ShojiClient.request("workspaces.get", undefined, (result, error) => {
+            if (result)
+                root.applyView(result);
+        });
     }
 
     function requestGeometry() {
-        if (!socket.connected)
-            return;
-        root.geomRequestId = root.nextId;
-        socket.write(JSON.stringify({
-            id: root.nextId++,
-            method: "debug.geometry",
-        }) + "\n");
-        socket.flush();
+        ShojiClient.request("debug.geometry", undefined, (result, error) => {
+            if (result)
+                root.usableAreas = result.usable || {};
+        });
     }
 
     // Move/resize a window (layout coords, chrome-inclusive rect).
     function setRect(windowId, x, y, width, height) {
-        if (!socket.connected)
-            return;
-        socket.write(JSON.stringify({
-            id: root.nextId++,
-            method: "windows.setRect",
-            params: {
-                windowId: windowId,
-                x: x,
-                y: y,
-                width: width,
-                height: height,
-            },
-        }) + "\n");
-        socket.flush();
+        ShojiClient.send("windows.setRect", {
+            windowId: windowId,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+        });
     }
 
     function applyView(view) {
@@ -156,46 +134,21 @@ Singleton {
             root.updated();
     }
 
-    Socket {
-        id: socket
+    Connections {
+        target: ShojiClient
 
-        path: root.socketPath
-
-        parser: SplitParser {
-            onRead: line => {
-                let msg;
-                try {
-                    msg = JSON.parse(line);
-                } catch (e) {
-                    return;
-                }
-                if (msg.event === "workspaces.changed")
-                    root.applyView(msg.payload);
-                else if (msg.event === "windows.rects")
-                    root.applyRects(msg.payload);
-                else if (msg.id === root.geomRequestId
-                        && msg.result !== undefined)
-                    root.usableAreas = msg.result.usable || {};
-                else if (msg.result !== undefined)
-                    root.applyView(msg.result);
-            }
+        function onBroadcast(name, payload) {
+            if (!root.active)
+                return;
+            if (name === "workspaces.changed")
+                root.applyView(payload);
+            else if (name === "windows.rects")
+                root.applyRects(payload);
         }
 
-        onConnectionStateChanged: {
-            if (connected)
+        function onConnectedChanged() {
+            if (ShojiClient.connected && root.active)
                 root.requestWindows();
-        }
-    }
-
-    // Reconnect while wanted (the socket is recreated when the ShojiWM
-    // config hot-reloads, so retrying forever is a feature).
-    Timer {
-        interval: 1000
-        repeat: true
-        running: root.active && !socket.connected
-        onTriggered: {
-            if (root.socketPath !== "")
-                socket.connected = true;
         }
     }
 
@@ -203,7 +156,11 @@ Singleton {
     Timer {
         interval: 200
         repeat: true
-        running: root.active && socket.connected
+        running: root.active && ShojiClient.connected
         onTriggered: root.requestWindows()
     }
+
+    // MinkaMon starts idle: no satellites, no socket. ShojiClient defaults
+    // wanted:true, so rein it in before its first connect attempt lands.
+    Component.onCompleted: ShojiClient.wanted = active
 }
