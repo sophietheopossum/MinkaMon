@@ -41,6 +41,8 @@ ShellRoot {
             if (tempMode)
                 wifiTempWin.visible = true;
         } else if (zone === "ssd") {
+            if (infoMode)
+                diskWin.visible = true;
             if (tempMode)
                 ssdTempWin.visible = true;
         } else if (zone === "board") {
@@ -57,6 +59,7 @@ ShellRoot {
         gpuWin.visible = false;
         memWin.visible = false;
         netWin.visible = false;
+        diskWin.visible = false;
         globeWin.visible = false;
         procWin.visible = false;
         ssdTempWin.visible = false;
@@ -67,13 +70,22 @@ ShellRoot {
     }
 
     // Full overview: open the 0.4.0 monitor-page set and arrange the real
-    // windows into its grid (CPU/GPU/NET left column, schematic centre,
-    // MEMORY + GLOBE right) via the compositor's windows.setRect.
+    // windows into its grid:
+    // left:
+    // CPU/GPU/NET
+    // centre:
+    // schematic
+    // right:
+    // MEMORY
+    // DISK
+    // GLOBE
+    // via the compositor's windows.setRect.
     function fullOverview() {
         cpuWin.visible = true;
         gpuWin.visible = true;
         netWin.visible = true;
         memWin.visible = true;
+        diskWin.visible = true;
         globeWin.visible = true;
         overviewPending = true;
         overviewTimeout.restart();
@@ -85,9 +97,15 @@ ShellRoot {
         if (!overviewPending)
             return;
         const wins = ShojiIpc.windows;
-        const names = ["MinkaMon", "MinkaMon // CPU", "MinkaMon // GPU",
-            "MinkaMon // NETWORK", "MinkaMon // MEMORY",
-            "MinkaMon // GLOBE"];
+        const names = [
+            "MinkaMon",
+            "MinkaMon // CPU",
+            "MinkaMon // GPU",
+            "MinkaMon // NETWORK",
+            "MinkaMon // MEMORY",
+            "MinkaMon // DISK",
+            "MinkaMon // GLOBE"
+        ];
         for (const n of names) {
             // Freshly-opened windows take a beat to appear in the WM view;
             // retry on the next geometry update until they're all there.
@@ -112,7 +130,8 @@ ShellRoot {
         const colMid = W - colLeft - colRight - pad * 4;
         const cpuH = (H - pad * 4) * 0.4;
         const gpuH = (H - pad * 4) * 0.32;
-        const memH = (H - pad * 3) * 0.42;
+        const memH = (H - pad * 4) * 0.36;
+        const diskH = (H - pad * 4) * 0.26;
         const place = (title, x, y, w, h) => {
             ShojiIpc.setRect(wins[title].id,
                 Math.round(usable.x + x - chrome),
@@ -127,8 +146,19 @@ ShellRoot {
         place("MinkaMon", colLeft + pad * 2, pad, colMid, H - pad * 2);
         place("MinkaMon // MEMORY", W - colRight - pad, pad,
             colRight, memH);
-        place("MinkaMon // GLOBE", W - colRight - pad, pad * 2 + memH,
-            colRight, H - memH - pad * 3);
+        place(
+            "MinkaMon // DISK", 
+            W - colRight - pad, 
+            pad * 2 + memH,
+            colRight, 
+            diskH,
+        );
+        place("MinkaMon // GLOBE", W - colRight - pad,
+            pad * 3 + memH
+            + diskH,
+            colRight, H - memH -
+            diskH -
+            pad * 4);
     }
 
     // Give freshly-opened windows a bounded window to appear in the WM
@@ -444,6 +474,19 @@ ShellRoot {
     }
 
     Satellite {
+        id: diskWin
+
+        label: "DISK"
+        implicitWidth: 520
+        implicitHeight: 400
+        minimumSize: Qt.size(380, 280)
+
+        DiskPanel {
+            anchors.fill: parent
+        }
+    }
+
+    Satellite {
         id: globeWin
 
         label: "GLOBE"
@@ -510,7 +553,9 @@ ShellRoot {
         target: ShojiIpc
         property: "active"
         value: win.visible && (cpuWin.visible || gpuWin.visible
-            || memWin.visible || netWin.visible || globeWin.visible
+            || memWin.visible || netWin.visible
+            || diskWin.visible
+            || globeWin.visible
             || procWin.visible || ssdTempWin.visible
             || boardTempWin.visible || wifiTempWin.visible
             || cpuTempWin.visible || gpuTempWin.visible)
@@ -530,6 +575,7 @@ ShellRoot {
                 { title: "MinkaMon // NETWORK", zone: "wifi" },
                 { title: "MinkaMon // GLOBE", zone: "wifi" },
                 { title: "MinkaMon // WIFI °C", zone: "wifi" },
+                { title: "MinkaMon // DISK", zone: "ssd" },
                 { title: "MinkaMon // SSD °C", zone: "ssd" },
                 { title: "MinkaMon // BOARD °C", zone: "board" },
                 { 

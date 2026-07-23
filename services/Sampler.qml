@@ -27,6 +27,7 @@ Singleton {
     property var gpu: null
     property var temps: []
     property var net: ({ downBps: 0, upBps: 0, ifaces: ({}) })
+    property var disk: ({ readBps: 0, writeBps: 0, disks: ({}) })
     property var conns: []
     property var procs: []
 
@@ -34,6 +35,8 @@ Singleton {
     property var cpuHistory: []
     property var downHistory: []
     property var upHistory: []
+    property var readHistory: []
+    property var writeHistory: []
 
     signal ticked()
 
@@ -72,6 +75,8 @@ Singleton {
                 root.gpu = sample.gpu;
                 root.temps = sample.temps;
                 root.net = sample.net;
+                if (sample.disk !== undefined)
+                    root.disk = sample.disk;
                 if (sample.conns !== undefined)
                     root.conns = sample.conns;
                 if (sample.procs !== undefined)
@@ -79,6 +84,8 @@ Singleton {
                 root.cpuHistory = root.pushHistory(root.cpuHistory, sample.cpu.total);
                 root.downHistory = root.pushHistory(root.downHistory, sample.net.downBps);
                 root.upHistory = root.pushHistory(root.upHistory, sample.net.upBps);
+                root.readHistory = root.pushHistory(root.readHistory, root.disk.readBps);
+                root.writeHistory = root.pushHistory(root.writeHistory, root.disk.writeBps);
                 root.ticked();
             }
         }

@@ -4,6 +4,7 @@
 Long-running process: emits one JSON object per line on stdout.
 
   every tick (1s):  cpu, mem, gpu, temps, net
+  disk
   every 2 ticks:    procs (full process table)
   every 5 ticks:    conns (established TCP, geolocated offline)
 
@@ -448,6 +449,58 @@ def net_rates(prev, cur, dt):
     return {"downBps": round(rx_total), "upBps": round(tx_total), "ifaces": per_iface}
 
 
+# --- disk ---
+
+def read_disks():
+    """name -> (read bytes, written bytes, io ms), whole disks only.
+
+    Partitions never appear as top-level /sys/block entries, so that
+    membership test keeps totals from double-counting; virtual devices
+    (loop/zram/dm/md) are skipped so stacked layers don't count twice
+    either. Sector counts in diskstats are always 512-byte units.
+    """
+    disks = {}
+    try:
+        with open("/proc/diskstats") as f:
+            for line in f:
+                parts = line.split()
+                name = parts[2]
+                if name.startswith(("loop", "ram", "zram", "dm-", "sr", "md")):
+                    continue
+                if not os.path.isdir("/sys/block/" + name):
+                    continue
+                disks[name] = (
+                    int(parts[5]) * 512,
+                    int(parts[9]) * 512,
+                    int(parts[12]),
+                )
+    except OSError:
+        pass
+    return disks
+
+
+def disk_rates(prev, cur, dt):
+    per_disk = {}
+    read_total = write_total = 0
+    for name, (rd, wr, io_ms) in cur.items():
+        prd, pwr, pio = prev.get(name, (rd, wr, io_ms))
+        drd = max(0, rd - prd) / dt
+        dwr = max(0, wr - pwr) / dt
+        util = max(0.0, min(100.0, (io_ms - pio) / dt / 10.0))
+        per_disk[name] = {
+            "readBps": round(drd),
+            "writeBps": round(dwr),
+            "utilPct": round(util, 1),
+        }
+        read_total += drd
+        write_total += dwr
+    return {
+        "readBps": round(read_total),
+        "writeBps": round(write_total),
+        "disks": per_disk,
+    }
+
+
 # --- connections ---
 
 def hex_to_ipv4(h):
@@ -539,6 +592,7 @@ def main():
     prev_cpu = read_cpu_times()
     prev_xe = read_xe_clients()
     prev_net = read_net()
+    prev_disk = read_disks()
     prev_procs = read_procs()
     prev_time = time.monotonic()
     prev_procs_time = prev_time
@@ -575,6 +629,7 @@ def main():
         cur_cpu = read_cpu_times()
         cur_xe = read_xe_clients()
         cur_net = read_net()
+        cur_disk = read_disks()
 
         if tick % 2 == 0:
             nvidia = read_nvidia()
@@ -593,6 +648,7 @@ def main():
             },
             "temps": temps,
             "net": net_rates(prev_net, cur_net, dt),
+            "disk": disk_rates(prev_disk, cur_disk, dt),
         }
         if tick % PROCS_EVERY == 0:
             cur_procs = read_procs()
@@ -607,7 +663,8 @@ def main():
             sample["conns"] = read_connections()
 
         print(json.dumps(sample), flush=True)
-        prev_cpu, prev_xe, prev_net, prev_time = cur_cpu, cur_xe, cur_net, now
+        prev_cpu, prev_xe, prev_net, prev_disk, prev_time = \
+            cur_cpu, cur_xe, cur_net, cur_disk, now
 
 
 if __name__ == "__main__":
