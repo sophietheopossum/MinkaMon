@@ -136,11 +136,12 @@ Panel {
             h: 24
         },
         {
-            zone: "ssd", 
+            zone: "ssd",
+            infoLabel: "DISK",
             tempLabel: "SSD °C",
             x: 30,
             y: 90,
-            w: 90, 
+            w: 90,
             h: 22
         },
     ] : [
@@ -181,11 +182,12 @@ Panel {
         },
         {
             zone: "ssd",
+            infoLabel: "DISK",
             tempLabel: "SSD °C",
-            x: 195, 
+            x: 195,
             y: 263,
-            w: 90, 
-            h: 20 
+            w: 90,
+            h: 20
         },
         {
             zone: "wifi", infoLabel: "NETWORK",
