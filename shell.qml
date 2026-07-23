@@ -209,8 +209,30 @@ ShellRoot {
             shellRoot.openZone(name);
         }
 
+        function close(name: string): void {
+            if (name === "cpu")
+                cpuWin.visible = false;
+            else if (name === "gpu")
+                gpuWin.visible = false;
+            else if (name === "ram")
+                memWin.visible = false;
+            else if (name === "wifi") {
+                netWin.visible = false;
+                globeWin.visible = false;
+            } else if (name === "ssd")
+                diskWin.visible = false;
+            else if (name === "processes")
+                procWin.visible = false;
+        }
+
         function closeAll(): void {
             shellRoot.closeAll();
+        }
+
+        // Leader-line state, for debugging stale lines: which titles the
+        // IPC view holds right now.
+        function windows(): string {
+            return JSON.stringify(Object.keys(ShojiIpc.windows));
         }
     }
 
