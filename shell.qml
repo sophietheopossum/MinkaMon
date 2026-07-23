@@ -98,23 +98,26 @@ ShellRoot {
     function tryArrangeOverview() {
         if (!overviewPending)
             return;
-        const wins = ShojiIpc.windows;
-        const names = [
-            "MinkaMon",
-            "MinkaMon // CPU",
-            "MinkaMon // GPU",
-            "MinkaMon // NETWORK",
-            "MinkaMon // MEMORY",
-            "MinkaMon // DISK",
-            "MinkaMon // GLOBE"
+        const wins = ShojiIpc.byRole;
+        const roles = [
+            "minkamon.main",
+            "minkamon.cpu",
+            "minkamon.gpu",
+            "minkamon.network",
+            "minkamon.memory",
+            "minkamon.disk",
+            "minkamon.globe"
         ];
-        for (const n of names) {
-            // Freshly-opened windows take a beat to appear in the WM view;
+        for (const r of roles) {
+            // Freshly-opened windows take a beat to appear in the WM view
+            // & claim their role;
             // retry on the next geometry update until they're all there.
-            if (!wins[n] || !wins[n].id)
+            if (!wins[r] || !wins[r].id)
                 return;
         }
-        const usable = ShojiIpc.usableAreas[wins["MinkaMon"].monitor];
+        const usable = ShojiIpc.usableAreas[wins[
+            "minkamon.main"
+            ].monitor];
         if (!usable) {
             ShojiIpc.requestGeometry();
             return;
@@ -134,51 +137,65 @@ ShellRoot {
         const diskH = (H - pad * 4) * 0.32;
         const cpuH = (H - pad * 4) * 0.36;
         const gpuH = (H - pad * 4) * 0.26;
-        const place = (title, x, y, w, h) => {
-            ShojiIpc.setRect(wins[title].id,
+        const place = (
+            role,
+            x,
+            y,
+            w,
+            h,
+        ) => {
+            ShojiIpc.setRect(wins[
+                role
+                    ].id,
                 Math.round(usable.x + x - chrome),
                 Math.round(usable.y + y - chrome),
                 Math.round(w + chrome * 2),
                 Math.round(h + chrome * 2));
         };
         place(
-            "MinkaMon // MEMORY", 
-            pad, 
+            "minkamon.memory",
+            pad,
             pad,
             colLeft,
             memH
         );
         place(
-            "MinkaMon // DISK",
+            "minkamon.disk",
             pad,
             pad * 2 + memH,
             colLeft,
             diskH
         );
         place(
-            "MinkaMon // NETWORK",
+            "minkamon.network",
             pad,
             pad * 3 + memH + diskH,
             colLeft,
             H - memH - diskH - pad * 4,
         );
-        place("MinkaMon", colLeft + pad * 2, pad, colMid, H - pad * 2);
         place(
-            "MinkaMon // CPU",
+            "minkamon.main",
+            colLeft + pad * 2,
+            pad,
+            colMid,
+            H - pad * 2,
+            );
+        place(
+            "minkamon.cpu",
             W - colRight - pad,
             pad,
-            colRight, 
+            colRight,
             cpuH
         );
         place(
-            "MinkaMon // GPU",
+            "minkamon.gpu",
             W - colRight - pad,
             pad * 2 + cpuH,
             colRight,
             gpuH,
         );
         place(
-            "MinkaMon // GLOBE",
+            "minkamon.globe",
             W - colRight - pad,
             pad * 3 + cpuH + gpuH,
             colRight,
@@ -199,6 +216,11 @@ ShellRoot {
         target: ShojiIpc
 
         function onUpdated() {
+            // The main window claims its role the same way satellites
+            // claim theirs (see the Satellite component).
+            const w = ShojiIpc.windows["MinkaMon"];
+            if (w && w.id && w.role !== "minkamon.main")
+                ShojiIpc.identify(w.id, "minkamon.main");
             shellRoot.tryArrangeOverview();
         }
 
@@ -241,9 +263,13 @@ ShellRoot {
         }
 
         // Leader-line state, for debugging stale lines: which titles the
-        // IPC view holds right now.
+        // IPC view holds right now
+        // & the role each has claimed.
         function windows(): string {
-            return JSON.stringify(Object.keys(ShojiIpc.windows));
+            const out = {};
+            for (const title of Object.keys(ShojiIpc.windows))
+                out[title] = ShojiIpc.windows[title].role || null;
+            return JSON.stringify(out);
         }
     }
 
@@ -284,6 +310,14 @@ ShellRoot {
         property string label
         default property alias content: inner.data
 
+        // Semantic identity claimed with the compositor ("typed segment"):
+        // consumers (leader lines, overview arrange) match on this, never
+        // on the display title. Derived from the label: "SSD °C" ->
+        // "minkamon.ssd-c".
+        readonly property string role: "minkamon."
+            + label.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "")
+
         visible: false
         title: "MinkaMon // " + label
         color: Theme.ground
@@ -292,6 +326,19 @@ ShellRoot {
         // made reopening (visible = true) a no-op. Track reality so the
         // next click remaps the window.
         onClosed: visible = false
+
+        // Claim the role once the compositor view shows this window (a
+        // fresh window id starts unclaimed, so this self-heals across
+        // close/reopen). Title is used only here, as the bootstrap key.
+        Connections {
+            target: ShojiIpc
+
+            function onUpdated() {
+                const w = ShojiIpc.windows[sat.title];
+                if (sat.visible && w && w.id && w.role !== sat.role)
+                    ShojiIpc.identify(w.id, sat.role);
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -616,24 +663,54 @@ ShellRoot {
         LeaderOverlay {
             systemPanel: sysPanel
             ties: [
-                { title: "MinkaMon // CPU", zone: "cpu" },
-                { title: "MinkaMon // GPU", zone: "gpu" },
-                { title: "MinkaMon // MEMORY", zone: "ram" },
-                { title: "MinkaMon // NETWORK", zone: "wifi" },
-                { title: "MinkaMon // GLOBE", zone: "wifi" },
-                { title: "MinkaMon // WIFI °C", zone: "wifi" },
-                { title: "MinkaMon // DISK", zone: "ssd" },
-                { title: "MinkaMon // SSD °C", zone: "ssd" },
-                { title: "MinkaMon // BOARD °C", zone: "board" },
                 { 
-                    title: "MinkaMon // CPU °C",
+                    role: "minkamon.cpu",
                     zone: "cpu",
                 },
                 {
-                    title: "MinkaMon // GPU °C", 
+                    role: "minkamon.gpu",
                     zone: "gpu",
                 },
-                { title: "MinkaMon // PROCESSES", zone: "cpu" },
+                { 
+                    role: "minkamon.memory",
+                    zone: "ram",
+                },
+                { 
+                    role: "minkamon.network",
+                    zone: "wifi",
+                },
+                { 
+                    role: "minkamon.globe",
+                    zone: "wifi", 
+                },
+                { 
+                    role: "minkamon.wifi-c", 
+                    zone: "wifi",
+                },
+                { 
+                    role: "minkamon.disk",
+                    zone: "ssd",
+                },
+                { 
+                    role: "minkamon.ssd-c",
+                    zone: "ssd",
+                },
+                { 
+                    role: "minkamon.board-c",
+                    zone: "board",
+                },
+                { 
+                    role: "minkamon.cpu-c",
+                    zone: "cpu",
+                },
+                {
+                    role: "minkamon.gpu-c", 
+                    zone: "gpu",
+                },
+                {
+                    role: "minkamon.processes",
+                    zone: "cpu",
+                },
             ]
         }
     }

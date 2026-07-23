@@ -16,8 +16,13 @@ PanelWindow {
 
     property var modelData
     property var systemPanel: null
-    property string mainTitle: "MinkaMon"
-    // [{ title, zone }]
+    // Windows are matched by claimed role ("typed segments"), never by
+    // title — titles are mutable display strings.
+    property string mainRole: "minkamon.main"
+    // [{ 
+    // role, 
+    // zone 
+    // }]
     property var ties: []
 
     // ShojiWM window rects include invisible chrome: a 14px edge-drag halo
@@ -98,8 +103,11 @@ PanelWindow {
 
     function rebuild() {
         const out = [];
-        const wins = ShojiIpc.windows;
-        const main = wins[mainTitle];
+        const wins = ShojiIpc.
+            byRole;
+        const main = wins[
+            mainRole
+            ];
         const sys = systemPanel;
         if (ShojiIpc.active && main && !main.minimized && sys) {
             const all = ShojiIpc.windowList;
@@ -110,7 +118,10 @@ PanelWindow {
                 height: r.height - chromeInset * 2,
             });
             for (const tie of ties) {
-                const sat = wins[tie.title];
+                const sat = wins[
+                    tie.
+                        role
+                    ];
                 if (!sat || sat.minimized)
                     continue;
                 if (ShojiIpc.fullscreenMonitors.indexOf(main.monitor) >= 0

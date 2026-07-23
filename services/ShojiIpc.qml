@@ -30,6 +30,9 @@ Singleton {
     // Usable (layer-exclusive-zone-free) area per monitor name, from
     // debug.geometry — filled on requestGeometry().
     property var usableAreas: ({})
+    // Windows keyed by claimed semantic role ("typed segments") — the
+    // stable way to find our own satellites; titles are display strings.
+    property var byRole: ({})
     signal updated()
 
     onActiveChanged: {
@@ -37,9 +40,19 @@ Singleton {
         if (!active) {
             windows = {};
             windowList = [];
+            byRole = {};
             fullscreenMonitors = [];
             updated();
         }
+    }
+
+    // Claim/revoke a window's semantic role ("typed segment" identity).
+    // Fire-and-forget; the role rides back on the next workspaces view.
+    function identify(windowId, role) {
+        ShojiClient.send("windows.identify", {
+            windowId: windowId,
+            role: role,
+        });
     }
 
     function requestWindows() {
@@ -72,6 +85,7 @@ Singleton {
             return;
         const map = {};
         const list = [];
+        const roles = {};
         const fs = [];
         for (const mon of view.monitors) {
             for (const ws of mon.workspaces) {
@@ -96,14 +110,18 @@ Singleton {
                         minimized: w.minimized === true,
                         monitor: mon.name,
                         dragTab: w.dragTab || null,
+                        role: w.role || null,
                     };
                     map[w.title] = entry;
                     list.push(entry);
+                    if (entry.role)
+                        roles[entry.role] = entry;
                 }
             }
         }
         root.windows = map;
         root.windowList = list;
+        root.byRole = roles;
         root.fullscreenMonitors = fs;
         root.updated();
     }
