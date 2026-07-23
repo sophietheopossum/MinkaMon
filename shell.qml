@@ -72,13 +72,13 @@ ShellRoot {
     // Full overview: open the 0.4.0 monitor-page set and arrange the real
     // windows into its grid:
     // left:
-    // CPU
+    // MEMORY
     // DISK
     // NET
     // centre:
     // schematic
     // right:
-    // MEMORY
+    // CPU
     // GPU
     // GLOBE
     // via the compositor's windows.setRect.
@@ -130,9 +130,9 @@ ShellRoot {
         const colLeft = W * 0.32;
         const colRight = W * 0.30;
         const colMid = W - colLeft - colRight - pad * 4;
-        const cpuH = (H - pad * 4) * 0.4;
+        const memH = (H - pad * 4) * 0.4;
         const diskH = (H - pad * 4) * 0.32;
-        const memH = (H - pad * 4) * 0.36;
+        const cpuH = (H - pad * 4) * 0.36;
         const gpuH = (H - pad * 4) * 0.26;
         const place = (title, x, y, w, h) => {
             ShojiIpc.setRect(wins[title].id,
@@ -141,37 +141,48 @@ ShellRoot {
                 Math.round(w + chrome * 2),
                 Math.round(h + chrome * 2));
         };
-        place("MinkaMon // CPU", pad, pad, colLeft, cpuH);
         place(
-            "MinkaMon // DISK", 
+            "MinkaMon // MEMORY", 
             pad, 
-            pad * 2 + cpuH, 
+            pad,
+            colLeft,
+            memH
+        );
+        place(
+            "MinkaMon // DISK",
+            pad,
+            pad * 2 + memH,
             colLeft,
             diskH
         );
         place(
             "MinkaMon // NETWORK",
-            pad, 
-            pad * 3 + cpuH + diskH,
-            colLeft, 
-            H - cpuH - diskH - pad * 4,
+            pad,
+            pad * 3 + memH + diskH,
+            colLeft,
+            H - memH - diskH - pad * 4,
         );
         place("MinkaMon", colLeft + pad * 2, pad, colMid, H - pad * 2);
-        place("MinkaMon // MEMORY", W - colRight - pad, pad,
-            colRight, memH);
+        place(
+            "MinkaMon // CPU",
+            W - colRight - pad,
+            pad,
+            colRight, 
+            cpuH
+        );
         place(
             "MinkaMon // GPU",
-            W - colRight - pad, 
-            pad * 2 + memH,
+            W - colRight - pad,
+            pad * 2 + cpuH,
             colRight,
             gpuH,
         );
         place(
             "MinkaMon // GLOBE",
             W - colRight - pad,
-            pad * 3 + memH + gpuH,
+            pad * 3 + cpuH + gpuH,
             colRight,
-            H - memH - gpuH - pad * 4,
+            H - cpuH - gpuH - pad * 4,
         );
     }
 
