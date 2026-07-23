@@ -86,7 +86,7 @@ Panel {
                 const py = cy - p.y * r;
                 ctx.beginPath();
                 ctx.arc(px, py, 2, 0, 2 * Math.PI);
-                ctx.fillStyle = Theme.glow;
+                ctx.fillStyle = Theme.red;
                 ctx.fill();
                 ctx.beginPath();
                 ctx.arc(px, py, 2 + root.pulse * 7, 0, 2 * Math.PI);

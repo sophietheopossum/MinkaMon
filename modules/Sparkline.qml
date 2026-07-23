@@ -7,7 +7,7 @@ Canvas {
 
     property var values: []
     property real maxValue: 0 // 0 = autoscale
-    property color lineColor: Theme.glow
+    property color lineColor: Theme.red
     property color fillColor: Theme.gaugeDim
 
     onValuesChanged: requestPaint()

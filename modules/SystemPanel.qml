@@ -595,7 +595,7 @@ Panel {
                 visible: zoneMouse.containsMouse
                 color: "transparent"
                 border.width: 1
-                border.color: Theme.glow
+                border.color: Theme.red
             }
 
             Rectangle {
@@ -609,7 +609,7 @@ Panel {
                 height: 17
                 color: Theme.ground
                 border.width: 1
-                border.color: Theme.glow
+                border.color: Theme.red
 
                 Text {
                     id: chipLabel
@@ -618,7 +618,7 @@ Panel {
                     text: parent.parent.chipText
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 4
-                    color: Theme.glow
+                    color: Theme.red
                 }
             }
         }

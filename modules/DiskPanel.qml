@@ -45,7 +45,7 @@ Panel {
                 text: Sampler.fmtBytes(Sampler.disk.readBps)
                 font.family: Theme.monoFamily
                 font.pixelSize: Theme.fontSize + 1
-                color: Theme.glow
+                color: Theme.red
             }
         }
 
@@ -102,7 +102,7 @@ Panel {
             anchors.margins: 1
             values: Sampler.readHistory
             maxValue: root.peak
-            lineColor: Theme.glow
+            lineColor: Theme.red
             fillColor: Theme.gaugeDim
         }
 

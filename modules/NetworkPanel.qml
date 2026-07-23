@@ -43,7 +43,7 @@ Panel {
                 text: Sampler.fmtBytes(Sampler.net.downBps)
                 font.family: Theme.monoFamily
                 font.pixelSize: Theme.fontSize + 1
-                color: Theme.glow
+                color: Theme.red
             }
         }
 
@@ -81,7 +81,7 @@ Panel {
             anchors.margins: 1
             values: Sampler.downHistory
             maxValue: root.peak
-            lineColor: Theme.glow
+            lineColor: Theme.red
             fillColor: Theme.gaugeDim
         }
 

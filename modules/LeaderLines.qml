@@ -146,7 +146,7 @@ Item {
                 const hot = i === hov;
                 const base = r.riser ? 0.4 : 0.6;
                 ctx.globalAlpha = hov < 0 ? base : (hot ? 1 : 0.15);
-                ctx.strokeStyle = Theme.glow;
+                ctx.strokeStyle = Theme.red;
                 ctx.lineWidth = hot ? 1.8 : 1.2;
                 ctx.beginPath();
                 ctx.moveTo(r.pts[0].x, r.pts[0].y);
@@ -155,7 +155,7 @@ Item {
                 ctx.stroke();
 
                 const end = r.pts[r.pts.length - 1];
-                ctx.fillStyle = Theme.glow;
+                ctx.fillStyle = Theme.red;
                 ctx.beginPath();
                 ctx.arc(end.x, end.y, hot ? 3.2 : 2.2, 0, Math.PI * 2);
                 ctx.fill();
@@ -191,10 +191,10 @@ Item {
                     ctx.globalAlpha = 0.92;
                     ctx.fillStyle = Theme.ground;
                     ctx.fillRect(lx - 4, ly - 10, tw + 8, 14);
-                    ctx.strokeStyle = Theme.glow;
+                    ctx.strokeStyle = Theme.red;
                     ctx.lineWidth = 1;
                     ctx.strokeRect(lx - 4, ly - 10, tw + 8, 14);
-                    ctx.fillStyle = Theme.glow;
+                    ctx.fillStyle = Theme.red;
                     ctx.fillText(r.label, lx, ly + 1);
                 }
             }

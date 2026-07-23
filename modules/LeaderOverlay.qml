@@ -192,8 +192,8 @@ PanelWindow {
             ctx.clearRect(0, 0, width, height);
             const ox = overlay.screen ? overlay.screen.x : 0;
             const oy = overlay.screen ? overlay.screen.y : 0;
-            ctx.strokeStyle = Theme.glow;
-            ctx.fillStyle = Theme.glow;
+            ctx.strokeStyle = Theme.red;
+            ctx.fillStyle = Theme.red;
             ctx.globalAlpha = 0.62;
             ctx.lineWidth = 1.2;
             for (const line of overlay.lines) {
