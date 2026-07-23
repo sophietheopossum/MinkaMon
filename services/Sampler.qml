@@ -37,6 +37,7 @@ Singleton {
     property var upHistory: []
     property var readHistory: []
     property var writeHistory: []
+    property var utilHistory: []
 
     signal ticked()
 
@@ -86,6 +87,7 @@ Singleton {
                 root.upHistory = root.pushHistory(root.upHistory, sample.net.upBps);
                 root.readHistory = root.pushHistory(root.readHistory, root.disk.readBps);
                 root.writeHistory = root.pushHistory(root.writeHistory, root.disk.writeBps);
+                root.utilHistory = root.pushHistory(root.utilHistory, root.disk.utilPct || 0);
                 root.ticked();
             }
         }

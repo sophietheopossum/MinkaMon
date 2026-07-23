@@ -1,9 +1,11 @@
 import QtQuick
 import "../services"
 
-// Read/write rates on top, per-disk breakdown pinned to the bottom, and a
-// single shared 60s chart between them: both directions overlaid on one
-// scale, colour-matched to the rate readouts (read red, write purple).
+// Read/write rates plus utilisation on top, per-disk breakdown pinned to
+// the bottom, and a single shared 60s chart between them: both throughput
+// directions overlaid on one scale, colour-matched to the rate readouts
+// (read red, write purple)
+// the utilisation line rides its own fixed 0-100% scale in amber.
 Panel {
     id: root
 
@@ -65,6 +67,25 @@ Panel {
                 color: Theme.purple
             }
         }
+
+        Column {
+            spacing: 1
+
+            Text {
+                text: "◆ UTILISATION"
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize - 3
+                font.letterSpacing: 1
+                color: Theme.textFaint
+            }
+
+            Text {
+                text: (Sampler.disk.utilPct || 0) + "%"
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontSize + 1
+                color: Theme.warnAmber
+            }
+        }
     }
 
     Rectangle {
@@ -96,6 +117,17 @@ Panel {
             fillColor: "transparent"
         }
 
+        // Utilisation rides its own fixed percentage scale, not the
+        // throughput peak — the amber colour is what signals the split.
+        Sparkline {
+            anchors.fill: parent
+            anchors.margins: 1
+            values: Sampler.utilHistory
+            maxValue: 100
+            lineColor: Theme.warnAmber
+            fillColor: "transparent"
+        }
+
         Text {
             anchors.left: parent.left
             anchors.top: parent.top
@@ -124,7 +156,8 @@ Panel {
                     + Sampler.fmtBytes(Sampler.disk.disks[modelData].readBps)
                     + "  ▸ "
                     + Sampler.fmtBytes(Sampler.disk.disks[modelData].writeBps)
-                    + "  · " + Sampler.disk.disks[modelData].utilPct + "% busy"
+                    + "  · " + Sampler.disk.disks[modelData].utilPct +
+                    "% util"
                 font.family: Theme.monoFamily
                 font.pixelSize: Theme.fontSize - 3
                 color: Theme.textFaint

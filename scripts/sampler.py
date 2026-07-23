@@ -482,6 +482,7 @@ def read_disks():
 def disk_rates(prev, cur, dt):
     per_disk = {}
     read_total = write_total = 0
+    util_max = 0.0
     for name, (rd, wr, io_ms) in cur.items():
         prd, pwr, pio = prev.get(name, (rd, wr, io_ms))
         drd = max(0, rd - prd) / dt
@@ -494,9 +495,13 @@ def disk_rates(prev, cur, dt):
         }
         read_total += drd
         write_total += dwr
+        util_max = max(util_max, util)
     return {
         "readBps": round(read_total),
         "writeBps": round(write_total),
+        # Busy-time isn't additive across devices; the overall figure is
+        # the busiest disk's.
+        "utilPct": round(util_max, 1),
         "disks": per_disk,
     }
 
