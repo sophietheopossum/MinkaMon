@@ -18,6 +18,51 @@ ShellRoot {
     property bool tempMode: false
     property bool overviewPending: false
 
+    // ── ScreenPad / duo mode ────────────────────────────────────────────
+    // On the Zenbook Duo the schematic is hosted as a layer surface pinned
+    // into the zone MinkaShell's dock and side column leave free, instead of
+    // a floating toplevel: it can then never steal focus, gain a dock chip,
+    // be switched away by a workspace change, or be dragged out of place.
+    //
+    // Detection deliberately mirrors MinkaShell's ShellLayout — same
+    // settings key, same shape-based fallback — so the two processes cannot
+    // disagree about which mode is active.
+    property string configuredLayout: "auto"
+
+    function isScreenPad(screen) {
+        return screen !== null && screen.height <= 600 && screen.width >= 1600;
+    }
+
+    readonly property var screenPad:
+        Quickshell.screens.find(s => shellRoot.isScreenPad(s)) ?? null
+
+    readonly property bool padMode: configuredLayout === "general"
+        ? false
+        : screenPad !== null
+
+    // The schematic is always up in one host or the other; satellites gate
+    // the sampler off this rather than off a single window's visibility.
+    readonly property bool mainVisible: win.visible || pad.visible
+
+    FileView {
+        id: settingsFile
+
+        path: Quickshell.env("HOME") + "/.config/minka-settings.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const data = JSON.parse(settingsFile.text());
+                const shell = data && data.shell ? data.shell : {};
+                const layout = shell.layout;
+                shellRoot.configuredLayout =
+                    layout === "duo" || layout === "general" ? layout : "auto";
+            } catch (e) {
+                shellRoot.configuredLayout = "auto";
+            }
+        }
+    }
+
     function openZone(zone) {
         if (zone === "cpu") {
             if (infoMode)
@@ -401,9 +446,41 @@ ShellRoot {
         }
     }
 
+    // Duo-mode host: a layer surface anchored to all four edges with no
+    // exclusive zone of its own, so it fills exactly what MinkaShell's dock
+    // and side column leave free. The split is derived from layer-shell
+    // arithmetic rather than negotiated, so neither app needs to know the
+    // other's dimensions and there is no IPC between them.
+    PanelWindow {
+        id: pad
+
+        visible: shellRoot.padMode
+        screen: shellRoot.screenPad
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        exclusionMode: ExclusionMode.Normal
+        exclusiveZone: 0
+        color: Theme.ground
+    }
+
+    // The body is declared inside the FloatingWindow below but reparented
+    // into whichever host is live. Reparenting rather than duplicating keeps
+    // `grabRoot` and `sysPanel` single ids, so the debug grab hook, the five
+    // temperature bindings and the leader overlay all keep working unchanged.
+    Binding {
+        target: grabRoot
+        property: "parent"
+        value: shellRoot.padMode ? pad.contentItem : win.contentItem
+    }
+
     FloatingWindow {
         id: win
 
+        visible: !shellRoot.padMode
         title: "MinkaMon"
         implicitWidth: 620
         implicitHeight: 560
@@ -646,7 +723,7 @@ ShellRoot {
     Binding {
         target: ShojiIpc
         property: "active"
-        value: win.visible && (cpuWin.visible || gpuWin.visible
+        value: shellRoot.mainVisible && (cpuWin.visible || gpuWin.visible
             || memWin.visible || netWin.visible
             || diskWin.visible
             || globeWin.visible
