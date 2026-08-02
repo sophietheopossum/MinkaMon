@@ -584,7 +584,13 @@ ShellRoot {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
+                // Vertical space is the scarce axis on the ScreenPad (471px
+                // once the dock is taken out), so the schematic gets a
+                // tighter top/bottom inset than sides. Panel adds its own
+                // 12/8 content padding inside this.
                 anchors.margins: 10
+                anchors.topMargin: 2
+                anchors.bottomMargin: 2
                 showInfo: shellRoot.infoMode
                 showTemp: shellRoot.tempMode
                 onZoneClicked: zone => shellRoot.openZone(zone)

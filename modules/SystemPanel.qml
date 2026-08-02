@@ -583,10 +583,10 @@ Panel {
         model: root.zones
 
         Item {
-            x: root.bx + modelData.x * root.bs
-            y: root.by + modelData.y * root.bs
-            width: modelData.w * root.bs
-            height: modelData.h * root.bs
+            x: root.bx + modelData.x * root.bsx
+            y: root.by + modelData.y * root.bsy
+            width: modelData.w * root.bsx
+            height: modelData.h * root.bsy
             visible: chipText !== ""
 
             // The chip names exactly what a click will open under the
