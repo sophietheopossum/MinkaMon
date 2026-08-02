@@ -76,11 +76,22 @@ Panel {
     // --- board transform, shared by the canvas and the click zones ---
     readonly property real boardW: zenbook ? 324 : 440
     readonly property real boardH: zenbook ? 222 : 400
-    readonly property real bs: Math.max(0.05, Math.min(
-        (map.width - 12) / boardW,
-        (map.height - 12) / boardH))
-    readonly property real bx: (map.width - boardW * bs) / 2
-    readonly property real by: (map.height - boardH * bs) / 2
+    // Non-uniform on purpose (Sophie, 2/8/2026): the ScreenPad zone is far
+    // wider than the board's natural 324x222, so a uniform fit letterboxed
+    // it with ~400px of dead space each side. Stretching each axis
+    // independently fills the box; the board is deliberately no longer to
+    // proportion. Horizontal padding stays larger than vertical because the
+    // vertical space is what is scarce on a 515px-tall output.
+    readonly property real padX: 12
+    readonly property real padY: 4
+    readonly property real bsx: Math.max(0.05, (map.width - padX) / boardW)
+    readonly property real bsy: Math.max(0.05, (map.height - padY) / boardH)
+    // Uniform scalar for things with no axis — corner radii, stroke widths,
+    // fan and blob radii. Taking the smaller keeps strokes from smearing and
+    // circles from becoming very flat ellipses when the stretch is extreme.
+    readonly property real bs: Math.min(bsx, bsy)
+    readonly property real bx: (map.width - boardW * bsx) / 2
+    readonly property real by: (map.height - boardH * bsy) / 2
 
     // Clickable hardware, in board units. Order is z-order: the broad
     // board region sits first so the specific components on it win the
@@ -205,8 +216,8 @@ Panel {
         for (const z of zones) {
             if (z.zone === zone)
                 return map.mapToItem(null,
-                    bx + (z.x + z.w / 2) * bs,
-                    by + (z.y + z.h / 2) * bs);
+                    bx + (z.x + z.w / 2) * bsx,
+                    by + (z.y + z.h / 2) * bsy);
         }
         return null;
     }
@@ -329,14 +340,18 @@ Panel {
         // Bottom-cover-off top view, hinge at the top. Board units are mm
         // on the real 324x222 chassis.
         function paintZenbook(ctx) {
-            const X = u => root.bx + u * root.bs;
-            const Y = v => root.by + v * root.bs;
+            const X = u => root.bx + u * root.bsx;
+            const Y = v => root.by + v * root.bsy;
+            // SX/SY scale extents along one axis; S stays uniform for radii
+            // and stroke widths, which have no axis.
+            const SX = u => u * root.bsx;
+            const SY = v => v * root.bsy;
             const S = u => u * root.bs;
             const r = root.readings;
 
             // Heat blobs first, additive, clipped to the chassis.
             ctx.save();
-            roundedPath(ctx, X(2), Y(2), S(320), S(218), S(10));
+            roundedPath(ctx, X(2), Y(2), SX(320), SY(218), S(10));
             ctx.clip();
             ctx.globalCompositeOperation = "lighter";
             blob(ctx, X(165), Y(62), S(62), r.board);
@@ -349,16 +364,16 @@ Panel {
             // Chassis + hinge stubs.
             ctx.strokeStyle = Theme.redDim;
             ctx.lineWidth = 1;
-            roundedPath(ctx, X(2), Y(2), S(320), S(218), S(10));
+            roundedPath(ctx, X(2), Y(2), SX(320), SY(218), S(10));
             ctx.stroke();
             ctx.globalAlpha = 0.5;
             ctx.fillStyle = Theme.redDim;
-            ctx.fillRect(X(80), Y(2), S(44), S(5));
-            ctx.fillRect(X(200), Y(2), S(44), S(5));
+            ctx.fillRect(X(80), Y(2), SX(44), SY(5));
+            ctx.fillRect(X(200), Y(2), SX(44), SY(5));
 
             // Motherboard region under the ScreenPad.
             ctx.globalAlpha = 0.6;
-            roundedPath(ctx, X(18), Y(12), S(288), S(74), S(4));
+            roundedPath(ctx, X(18), Y(12), SX(288), SY(74), S(4));
             ctx.stroke();
             ctx.globalAlpha = 1;
 
@@ -392,40 +407,40 @@ Panel {
                 ctx.fillStyle = "rgba(" + rgb[0] + "," + rgb[1] + ","
                     + rgb[2] + ",0.45)";
                 ctx.fillRect(X(129 + (i % 2) * 11),
-                    Y(34 + Math.floor(i / 2) * 11), S(11), S(11));
+                    Y(34 + Math.floor(i / 2) * 11), SX(11), SY(11));
             }
             ctx.strokeStyle = Theme.red;
-            ctx.strokeRect(X(129), Y(34), S(22), S(22));
+            ctx.strokeRect(X(129), Y(34), SX(22), SY(22));
 
             // MX450 die.
-            ctx.strokeRect(X(184), Y(42), S(16), S(16));
+            ctx.strokeRect(X(184), Y(42), SX(16), SY(16));
 
             // Soldered LPDDR4X beside the package.
             ctx.strokeStyle = Theme.redDim;
             ctx.globalAlpha = 0.8;
-            ctx.strokeRect(X(104), Y(62), S(14), S(9));
-            ctx.strokeRect(X(104), Y(74), S(14), S(9));
+            ctx.strokeRect(X(104), Y(62), SX(14), SY(9));
+            ctx.strokeRect(X(104), Y(74), SX(14), SY(9));
             ctx.globalAlpha = 1;
 
             // M.2 SSD with its connector notch.
             ctx.strokeStyle = Theme.red;
-            ctx.strokeRect(X(35), Y(95), S(80), S(12));
+            ctx.strokeRect(X(35), Y(95), SX(80), SY(12));
             ctx.beginPath();
             ctx.moveTo(X(41), Y(95));
             ctx.lineTo(X(41), Y(107));
             ctx.stroke();
 
             // Wi-Fi module.
-            ctx.strokeRect(X(242), Y(67), S(16), S(14));
+            ctx.strokeRect(X(242), Y(67), SX(16), SY(14));
 
             // Battery + speakers along the front edge.
             ctx.strokeStyle = Theme.redDim;
             ctx.globalAlpha = 0.7;
-            roundedPath(ctx, X(60), Y(120), S(204), S(85), S(6));
+            roundedPath(ctx, X(60), Y(120), SX(204), SY(85), S(6));
             ctx.stroke();
-            roundedPath(ctx, X(20), Y(175), S(30), S(30), S(4));
+            roundedPath(ctx, X(20), Y(175), SX(30), SY(30), S(4));
             ctx.stroke();
-            roundedPath(ctx, X(274), Y(175), S(30), S(30), S(4));
+            roundedPath(ctx, X(274), Y(175), SX(30), SY(30), S(4));
             ctx.stroke();
             for (let k = 0; k < 3; k++) {
                 ctx.beginPath();
@@ -452,13 +467,17 @@ Panel {
 
         // Generic side-view tower for machines this panel doesn't know.
         function paintTower(ctx) {
-            const X = u => root.bx + u * root.bs;
-            const Y = v => root.by + v * root.bs;
+            const X = u => root.bx + u * root.bsx;
+            const Y = v => root.by + v * root.bsy;
+            // SX/SY scale extents along one axis; S stays uniform for radii
+            // and stroke widths, which have no axis.
+            const SX = u => u * root.bsx;
+            const SY = v => v * root.bsy;
             const S = u => u * root.bs;
             const r = root.readings;
 
             ctx.save();
-            roundedPath(ctx, X(5), Y(5), S(430), S(390), S(8));
+            roundedPath(ctx, X(5), Y(5), SX(430), SY(390), S(8));
             ctx.clip();
             ctx.globalCompositeOperation = "lighter";
             blob(ctx, X(252), Y(112), S(50), r.pkg);
@@ -470,12 +489,12 @@ Panel {
 
             ctx.strokeStyle = Theme.redDim;
             ctx.lineWidth = 1;
-            roundedPath(ctx, X(5), Y(5), S(430), S(390), S(8));
+            roundedPath(ctx, X(5), Y(5), SX(430), SY(390), S(8));
             ctx.stroke();
 
             // Motherboard region.
             ctx.globalAlpha = 0.6;
-            roundedPath(ctx, X(170), Y(40), S(240), S(250), S(4));
+            roundedPath(ctx, X(170), Y(40), SX(240), SY(250), S(4));
             ctx.stroke();
             ctx.globalAlpha = 1;
 
@@ -490,23 +509,23 @@ Panel {
                 ctx.fillStyle = "rgba(" + rgb[0] + "," + rgb[1] + ","
                     + rgb[2] + ",0.45)";
                 ctx.fillRect(X(230 + (i % 2) * 22),
-                    Y(90 + Math.floor(i / 2) * 22), S(22), S(22));
+                    Y(90 + Math.floor(i / 2) * 22), SX(22), SY(22));
             }
             ctx.strokeStyle = Theme.redDim;
             ctx.beginPath();
             ctx.arc(X(252), Y(112), S(32), 0, Math.PI * 2);
             ctx.stroke();
             ctx.strokeStyle = Theme.red;
-            ctx.strokeRect(X(230), Y(90), S(44), S(44));
+            ctx.strokeRect(X(230), Y(90), SX(44), SY(44));
 
             // RAM slots.
             ctx.strokeStyle = Theme.redDim;
             for (let k = 0; k < 4; k++)
-                ctx.strokeRect(X(310 + k * 14), Y(62), S(6), S(118));
+                ctx.strokeRect(X(310 + k * 14), Y(62), SX(6), SY(118));
 
             // GPU card.
             ctx.strokeStyle = Theme.red;
-            ctx.strokeRect(X(150), Y(220), S(220), S(34));
+            ctx.strokeRect(X(150), Y(220), SX(220), SY(34));
             ctx.strokeStyle = Theme.redDim;
             ctx.beginPath();
             ctx.arc(X(210), Y(237), S(13), 0, Math.PI * 2);
@@ -517,14 +536,14 @@ Panel {
 
             // M.2, chipset, Wi-Fi.
             ctx.strokeStyle = Theme.red;
-            ctx.strokeRect(X(200), Y(270), S(80), S(10));
-            ctx.strokeRect(X(330), Y(265), S(22), S(22));
-            ctx.strokeRect(X(390), Y(300), S(14), S(12));
+            ctx.strokeRect(X(200), Y(270), SX(80), SY(10));
+            ctx.strokeRect(X(330), Y(265), SX(22), SY(22));
+            ctx.strokeRect(X(390), Y(300), SX(14), SY(12));
 
             // PSU.
             ctx.strokeStyle = Theme.redDim;
             ctx.globalAlpha = 0.7;
-            roundedPath(ctx, X(20), Y(320), S(140), S(60), S(4));
+            roundedPath(ctx, X(20), Y(320), SX(140), SY(60), S(4));
             ctx.stroke();
             ctx.globalAlpha = 1;
             fan(ctx, X(55), Y(350), S(22));
