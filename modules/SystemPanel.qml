@@ -13,6 +13,12 @@ Panel {
 
     title: zenbook ? "SYSTEM // UX482EG" : "SYSTEM"
 
+    // The schematic is the one panel that is height-starved rather than
+    // width-starved (471px on the ScreenPad once the dock is out), so it
+    // claws back the vertical inset. Sides keep the shared default.
+    contentTopMargin: 2
+    contentBottomMargin: 2
+
     signal zoneClicked(string zone)
 
     readonly property bool zenbook:

@@ -11,6 +11,15 @@ Item {
     // Optional right-aligned content on the header line (e.g. a legend).
     property alias headerData: headerExtra.data
 
+    // Inset around `contentItem`. Overridable so a panel that is short on one
+    // axis can tighten it without restyling every other panel: SystemPanel
+    // pulls the vertical values in on the ScreenPad, where height is the
+    // scarce dimension. Defaults are the values every instrument used before
+    // this became configurable, so unset panels are unchanged.
+    property real contentMargin: 12
+    property real contentTopMargin: 8
+    property real contentBottomMargin: contentMargin
+
     Rectangle {
         anchors.fill: parent
         color: Theme.surface
@@ -90,8 +99,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: 12
-        anchors.topMargin: 8
+        anchors.margins: root.contentMargin
+        anchors.topMargin: root.contentTopMargin
+        anchors.bottomMargin: root.contentBottomMargin
         clip: true
     }
 }
