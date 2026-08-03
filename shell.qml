@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import QtQuick
 import "services"
 import "modules"
@@ -462,6 +463,10 @@ ShellRoot {
             left: true
             right: true
         }
+        // Bottom, not the default top: the schematic is a backdrop for the
+        // ScreenPad, so a window moved down there has to be able to cover it.
+        // Above Background so it still sits over MinkaShell's wallpaper.
+        WlrLayershell.layer: WlrLayer.Bottom
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
         color: Theme.ground
