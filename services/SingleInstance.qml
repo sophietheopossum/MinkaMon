@@ -4,47 +4,89 @@ import QtQuick
 
 // Cross-process single-instance guard.
 //
-// The first instance binds a Unix socket in $XDG_RUNTIME_DIR. A later launch
-// fails to bind, proves the holder is actually alive, and then quits.
+// Probe first, bind second. That order is forced by Quickshell: SocketServer
+// DELETES any existing socket file to claim the path ("Deleted existing file
+// at ... to create socket"), so a failed bind can never be the signal — a
+// second launch would simply steal the lock. Instead a launch connects to the
+// lock socket first and only binds if nothing answers.
 //
-// The probe is the point of the whole thing. A crashed instance leaves its
-// socket file behind, so "bind failed" on its own does NOT mean another copy
-// is running — treating it that way would stop the app launching at all until
-// someone deleted the file by hand, which is a worse failure than the
-// duplicate it set out to prevent. So a failed bind is followed by a
-// connection attempt: something answers only if a real instance owns the lock.
-// Nothing answering means the file is stale, and it is removed and the bind
-// retried once.
+// The holder answers with its own PID, which is what makes this safe across
+// config reloads. SocketServer is Reloadable, so its socket survives a live
+// reload; without the PID a reloading instance would connect to its own
+// carried-over socket, conclude a duplicate was running, and quit itself —
+// far worse than the duplicate this prevents. A reply matching our own PID
+// means we are already the holder, so we carry on.
 //
-// Every uncertain path deliberately falls through to "keep running". This
-// quits only when it has positive proof that another instance is listening.
+// Every uncertain path falls through to "keep running". This quits only on
+// positive proof that a DIFFERENT live process owns the lock.
 //
 // Why it exists: MinkaMon's ScreenPad mode is a layer surface, and duplicate
-// layer surfaces stack invisibly — no dock entry, nothing in the window list,
-// just a schematic that looks wrong. (Sophie, 3/8/2026.)
+// layer surfaces stack invisibly — no dock chip, nothing in the window list,
+// just a schematic that renders wrong. (Sophie, 3/8/2026.)
 Item {
     id: root
 
     required property string name
 
-    // Raised on the instance that survives when a later launch is turned
-    // away: the cue to present yourself to the user, who evidently just
-    // asked for this app.
+    // Raised on the surviving instance when a later launch is turned away:
+    // the cue to present yourself to the user, who just asked for this app.
     signal duplicateRejected
 
     readonly property string lockPath:
         (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/" + name + ".lock"
 
-    // "binding" -> "primary" | "probing" -> "primary" (stale, retaken)
-    property string phase: "binding"
-    property bool staleRetried: false
+    // "probing" -> "primary" (bound, or already ours) | quit
+    property string phase: "probing"
 
-    function takeLock() {
-        root.phase = "binding";
+    Component.onCompleted: {
+        probeTimeout.restart();
+        probe.path = root.lockPath;
+        probe.connected = true;
+    }
+
+    function becomePrimary() {
+        probeTimeout.stop();
+        probe.connected = false;
+        root.phase = "primary";
         server.active = true;
     }
 
-    Component.onCompleted: root.takeLock()
+    function onHolderReplied(line) {
+        if (root.phase !== "probing")
+            return;
+        const holder = parseInt(line, 10);
+        if (!isFinite(holder) || holder === Quickshell.processId) {
+            // Our own socket, carried across a reload — or an unreadable
+            // reply. Either way, not proof of anyone else.
+            root.becomePrimary();
+            return;
+        }
+        probeTimeout.stop();
+        probe.connected = false;
+        console.warn(root.name + ": already running as pid " + holder + ", exiting.");
+        Qt.quit();
+    }
+
+    Socket {
+        id: probe
+
+        parser: SplitParser {
+            splitMarker: "\n"
+            onRead: line => root.onHolderReplied(line)
+        }
+    }
+
+    // Nothing answered in time, so no live holder. Falling through to taking
+    // the lock is the branch that keeps the app running.
+    Timer {
+        id: probeTimeout
+
+        interval: 600
+        onTriggered: {
+            if (root.phase === "probing")
+                root.becomePrimary();
+        }
+    }
 
     SocketServer {
         id: server
@@ -53,81 +95,15 @@ Item {
         active: false
 
         handler: Socket {
-            // A later launch connects only to prove we are alive, then drops
-            // it. Treat that as a request to show ourselves.
+            // Announce which process holds the lock, so a prober can tell a
+            // real duplicate from this same process after a config reload.
             onConnectionStateChanged: {
-                if (connected)
-                    root.duplicateRejected();
+                if (!connected)
+                    return;
+                write(Quickshell.processId + "\n");
+                flush();
+                root.duplicateRejected();
             }
-        }
-
-        onActiveStatusChanged: {
-            if (server.active) {
-                root.phase = "primary";
-                return;
-            }
-            if (root.phase !== "binding")
-                return;
-            // Could not bind. Find out whether anyone is actually there.
-            root.phase = "probing";
-            probeTimeout.restart();
-            probe.path = root.lockPath;
-            probe.connected = true;
-        }
-    }
-
-    Socket {
-        id: probe
-
-        onConnectionStateChanged: {
-            if (root.phase !== "probing" || !connected)
-                return;
-            // Positive proof: someone is listening on the lock.
-            probeTimeout.stop();
-            probe.connected = false;
-            console.warn(root.name + ": another instance is already running, exiting.");
-            Qt.quit();
-        }
-
-        // Deliberately no `onError` handler. Its parameter is a Qt enum the
-        // linter cannot resolve (and a comment line must not start with that
-        // tool's name, or it is parsed as a lint directive). The timeout
-        // below already covers the "nothing answered" case, so dropping the
-        // error signal only costs the stale-lock path one second.
-    }
-
-    // Nothing answered within the window, so no live instance owns the lock.
-    // Falling through to "stale" is the branch that keeps the app running.
-    Timer {
-        id: probeTimeout
-
-        interval: 1000
-        onTriggered: {
-            if (root.phase === "probing")
-                root.reclaimStaleLock();
-        }
-    }
-
-    function reclaimStaleLock() {
-        if (root.staleRetried) {
-            // Already tried once; run unguarded rather than refuse to start.
-            console.warn(root.name + ": could not take the instance lock, continuing anyway.");
-            root.phase = "primary";
-            return;
-        }
-        root.staleRetried = true;
-        probe.connected = false;
-        unlink.running = true;
-    }
-
-    Process {
-        id: unlink
-
-        command: ["rm", "-f", root.lockPath]
-
-        onRunningChanged: {
-            if (!running && root.phase === "probing")
-                root.takeLock();
         }
     }
 }
