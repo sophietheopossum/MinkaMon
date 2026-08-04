@@ -55,6 +55,16 @@ Singleton {
         });
     }
 
+    // Ask the compositor to focus and unminimize a window. MinkaMon uses this
+    // on itself — Quickshell exposes no raise/activate on its window types,
+    // so the compositor is the only thing that can bring the main window
+    // forward when a second launch is turned away.
+    function activateWindow(windowId) {
+        ShojiClient.send("windows.activate", {
+            windowId: windowId,
+        });
+    }
+
     function requestWindows() {
         ShojiClient.request("workspaces.get", undefined, (result, error) => {
             if (result)

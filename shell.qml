@@ -18,6 +18,26 @@ ShellRoot {
     property bool infoMode: true
     property bool tempMode: false
     property bool overviewPending: false
+    // Held true only while a raise is in flight; see the ShojiIpc.active
+    // binding and SingleInstance.onDuplicateRejected below.
+    property bool raisePending: false
+
+    // Resolves our own window once the workspaces view has arrived and asks
+    // the compositor to focus it. Role first — that is what typed segments
+    // are for — with the title as the bootstrap fallback, matching how
+    // MinkaShot's `shot win` resolves a target.
+    Timer {
+        id: raiseWindow
+
+        interval: 250
+        onTriggered: {
+            const self = ShojiIpc.byRole["minkamon.main"]
+                || ShojiIpc.windows["MinkaMon"];
+            if (self && self.id)
+                ShojiIpc.activateWindow(self.id);
+            shellRoot.raisePending = false;
+        }
+    }
 
     // ── ScreenPad / duo mode ────────────────────────────────────────────
     // On the Zenbook Duo the schematic is hosted as a layer surface pinned
@@ -50,6 +70,21 @@ ShellRoot {
     // window list, just a schematic that renders wrong.
     SingleInstance {
         name: "minkamon"
+
+        // Someone asked for MinkaMon while it was already running, so put it
+        // in front of them. In ScreenPad mode there is nothing to raise: the
+        // schematic is a layer surface pinned below windows, always present
+        // and never focusable.
+        //
+        // The window list is normally only streamed while a leader line could
+        // draw, so this asks for it (raisePending) and gives the view a beat
+        // to arrive before looking ourselves up.
+        onDuplicateRejected: {
+            if (shellRoot.padMode)
+                return;
+            shellRoot.raisePending = true;
+            raiseWindow.restart();
+        }
     }
 
     FileView {
@@ -738,10 +773,13 @@ ShellRoot {
 
     // The ShojiWM IPC only needs to stream window geometry while a leader
     // line could actually draw: main window plus at least one satellite.
+    // `raisePending` is the exception: raising ourselves needs the window
+    // list, so the client is brought up briefly even with no satellites open.
     Binding {
         target: ShojiIpc
         property: "active"
-        value: shellRoot.mainVisible && (cpuWin.visible || gpuWin.visible
+        value: shellRoot.raisePending
+            || shellRoot.mainVisible && (cpuWin.visible || gpuWin.visible
             || memWin.visible || netWin.visible
             || diskWin.visible
             || globeWin.visible
