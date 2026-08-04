@@ -45,6 +45,13 @@ ShellRoot {
     // the sampler off this rather than off a single window's visibility.
     readonly property bool mainVisible: win.visible || pad.visible
 
+    // Refuse to run twice. In ScreenPad mode the main view is a layer
+    // surface, and duplicates stack invisibly — no dock chip, nothing in the
+    // window list, just a schematic that renders wrong.
+    SingleInstance {
+        name: "minkamon"
+    }
+
     FileView {
         id: settingsFile
 
