@@ -3,7 +3,7 @@ Type=Application
 Name=MinkaMon
 GenericName=System Monitor
 Comment=Minka system monitor
-Exec=env QT_QPA_PLATFORM=wayland qs -p /usr/share/minka/MinkaMon
+Exec=minkamon
 Icon=utilities-system-monitor
 Terminal=false
 Categories=System;Monitor;Qt;

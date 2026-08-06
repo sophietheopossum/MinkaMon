@@ -1,0 +1,33 @@
+#!/bin/sh
+# MinkaMon launcher: runs the Quickshell tree with its output captured.
+#
+# Quickshell has no --log-file option, and the Desktop Entry spec only
+# recognises double quotes, so carrying a shell redirect in `Exec=` means
+# escaping every quote and `$` into something unreadable. The redirect lives
+# here instead, which also gives `minkamon` as a plain command.
+#
+# Without this, stdout and stderr both land on /dev/null: a single-instance
+# rejection, a QML warning and a sampler traceback are all equally invisible.
+#
+# Takes the config directory as an optional argument so the same script serves
+# an installed tree and a repo checkout.
+set -eu
+
+CONFIG="${1:-/usr/share/minka/MinkaMon}"
+
+LOG_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/minka"
+LOG="$LOG_DIR/minkamon.log"
+mkdir -p "$LOG_DIR"
+
+# Roll at 2MB keeping one generation. A monitor that re-samples sensors on
+# every resume is not somewhere to leave growth unbounded — this project has
+# already had a log directory reach 71GB.
+if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2097152 ]; then
+    mv -f "$LOG" "$LOG.1"
+fi
+
+printf '\n=== MinkaMon starting: %s ===\n' "$(date -Is)" >> "$LOG"
+
+# --log-times: without it the lines carry no timestamps, which makes
+# correlating against ~/shoji_wm/logs or the journal guesswork.
+exec env QT_QPA_PLATFORM=wayland qs --log-times -p "$CONFIG" >> "$LOG" 2>&1
