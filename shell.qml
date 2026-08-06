@@ -65,6 +65,20 @@ ShellRoot {
     // the sampler off this rather than off a single window's visibility.
     readonly property bool mainVisible: win.visible || pad.visible
 
+    // Which layer the duo-mode host sits on. Bottom while it is acting as the
+    // ScreenPad's backdrop, lifted to Top for a beat when the user asks for
+    // MinkaMon again: a layer surface has no toplevel for the compositor to
+    // activate, and one pinned below windows cannot be raised at all, so a
+    // second launch would otherwise leave it buried with nothing to show.
+    property int padLayer: WlrLayer.Bottom
+
+    Timer {
+        id: sinkPad
+
+        interval: 4000
+        onTriggered: shellRoot.padLayer = WlrLayer.Bottom
+    }
+
     // Refuse to run twice. In ScreenPad mode the main view is a layer
     // surface, and duplicates stack invisibly — no dock chip, nothing in the
     // window list, just a schematic that renders wrong.
@@ -72,16 +86,23 @@ ShellRoot {
         name: "minkamon"
 
         // Someone asked for MinkaMon while it was already running, so put it
-        // in front of them. In ScreenPad mode there is nothing to raise: the
-        // schematic is a layer surface pinned below windows, always present
-        // and never focusable.
+        // in front of them.
         //
-        // The window list is normally only streamed while a leader line could
-        // draw, so this asks for it (raisePending) and gives the view a beat
-        // to arrive before looking ourselves up.
+        // In ScreenPad mode there is no toplevel to activate, and the
+        // compositor sorts Bottom strictly below every window, so the raise
+        // has to be done by moving layers rather than by asking for focus.
+        // `sinkPad` returns it to being a backdrop once it has been seen.
+        //
+        // As a floating window it is an ordinary toplevel. The window list is
+        // normally only streamed while a leader line could draw, so this asks
+        // for it (raisePending) and gives the view a beat to arrive before
+        // looking ourselves up.
         onDuplicateRejected: {
-            if (shellRoot.padMode)
+            if (shellRoot.padMode) {
+                shellRoot.padLayer = WlrLayer.Top;
+                sinkPad.restart();
                 return;
+            }
             shellRoot.raisePending = true;
             raiseWindow.restart();
         }
@@ -508,7 +529,8 @@ ShellRoot {
         // Bottom, not the default top: the schematic is a backdrop for the
         // ScreenPad, so a window moved down there has to be able to cover it.
         // Above Background so it still sits over MinkaShell's wallpaper.
-        WlrLayershell.layer: WlrLayer.Bottom
+        // Briefly Top while surfacing — see `padLayer`.
+        WlrLayershell.layer: shellRoot.padLayer
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
         color: Theme.ground
