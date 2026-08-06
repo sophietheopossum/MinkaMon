@@ -99,10 +99,15 @@ ShellRoot {
         // looking ourselves up.
         onDuplicateRejected: {
             if (shellRoot.padMode) {
+                console.warn("MinkaMon: relaunched in ScreenPad mode; lifting the "
+                    + "schematic to the top layer for "
+                    + (sinkPad.interval / 1000) + "s.");
                 shellRoot.padLayer = WlrLayer.Top;
                 sinkPad.restart();
                 return;
             }
+            console.warn("MinkaMon: relaunched as a floating window; asking the "
+                + "compositor to activate it.");
             shellRoot.raisePending = true;
             raiseWindow.restart();
         }

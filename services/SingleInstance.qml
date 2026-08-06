@@ -102,6 +102,12 @@ Item {
                     return;
                 write(Quickshell.processId + "\n");
                 flush();
+                // Logged at warning level so it survives the default Qt
+                // filter rules: the whole reason this line exists is that a
+                // rejected launch used to be completely silent, and an info
+                // line that gets filtered would be no better.
+                console.warn(root.name + ": duplicate launch rejected; we are pid "
+                    + Quickshell.processId + ".");
                 root.duplicateRejected();
             }
         }
