@@ -63,7 +63,34 @@ ShellRoot {
 
     // The schematic is always up in one host or the other; satellites gate
     // the sampler off this rather than off a single window's visibility.
-    readonly property bool mainVisible: win.visible || pad.visible
+    // Deliberately `padMode` and not `pad.visible`: the pad is still the host
+    // during the settle delay below, and the IPC stream must not blink off
+    // just because the surface is being held back for a moment.
+    readonly property bool mainVisible: win.visible || shellRoot.padMode
+
+    // The ScreenPad is hot-unplugged on suspend and re-plugged on resume —
+    // ShojiWM logs "disconnected/connected tty output ... output=DP-1" — which
+    // destroys and re-creates every layer surface on it. ShojiWM orders
+    // Background against Bottom by BIND ORDER rather than by layer kind, so a
+    // straight re-bind races MinkaShell's ScreenPad wallpaper, and losing that
+    // race means the schematic comes back running, correctly placed, and
+    // completely invisible. Binding second wins, so hold the host back a beat.
+    //
+    // This is the hotplug counterpart to the `sleep` in the minkamon autostart:
+    // that one only orders the session's first bind and does nothing for the
+    // re-bind after every resume. Both are workarounds — drop them together
+    // once the compositor sorts those two layers properly.
+    property bool padSettled: false
+
+    onScreenPadChanged: shellRoot.padSettled = false
+
+    Timer {
+        id: padSettle
+
+        interval: 2500
+        running: shellRoot.screenPad !== null
+        onTriggered: shellRoot.padSettled = true
+    }
 
     // Which layer the duo-mode host sits on. Bottom while it is acting as the
     // ScreenPad's backdrop, lifted to Top for a beat when the user asks for
@@ -523,7 +550,9 @@ ShellRoot {
     PanelWindow {
         id: pad
 
-        visible: shellRoot.padMode
+        // `padSettled` holds the first bind back a beat after the ScreenPad
+        // appears, so we always bind after MinkaShell's wallpaper — see above.
+        visible: shellRoot.padMode && shellRoot.padSettled
         screen: shellRoot.screenPad
         anchors {
             top: true
