@@ -6,9 +6,10 @@ import QtQuick
 import "../MinkaLink"
 
 // MinkaMon's window-geometry view of the ShojiWM IPC, layered on
-// MinkaLink's ShojiClient transport. Window move/resize doesn't trigger a
-// compositor broadcast, so while `active` this polls workspaces.get; the
-// payload is tiny and the socket is local.
+// MinkaLink's ShojiClient transport. While `active` this polls
+// workspaces.get; the payload is tiny and the socket is local. The poll is
+// both the geometry fallback and the renewal of the windows.rects lease,
+// which is what gets drags and resizes pushed at event rate.
 // Idle still means no socket traffic at all: `active` gates ShojiClient.wanted,
 // which drops the connection entirely.
 Singleton {
@@ -17,6 +18,13 @@ Singleton {
     // Consumers flip this while they need geometry (main window plus at
     // least one satellite open).
     property bool active: false
+
+    // windows.rects lease token. The config pushes event-rate rects only to
+    // lease holders, and every workspaces.get poll below renews the lease
+    // (the config lets it lapse 2 s after the last poll). A config that
+    // predates leases ignores the params and broadcasts to every client.
+    readonly property string rectsLease: "minkamon-" + Date.now().toString(36)
+        + "-" + Math.floor(Math.random() * 0x7fffffff).toString(36)
 
     // Windows on *active* workspaces only, keyed by title:
     // { x, y, width, height, focused, lastFocusedAt, fullscreen,
@@ -66,7 +74,9 @@ Singleton {
     }
 
     function requestWindows() {
-        ShojiClient.request("workspaces.get", undefined, (result, error) => {
+        ShojiClient.request("workspaces.get", {
+            rectsLease: root.rectsLease,
+        }, (result, error) => {
             if (result)
                 root.applyView(result);
         });
