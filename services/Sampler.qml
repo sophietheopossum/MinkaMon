@@ -92,6 +92,11 @@ Singleton {
             }
         }
 
+        // Without a parser Quickshell closes the channel and Qt discards it.
+        stderr: SplitParser {
+            onRead: line => console.warn("MinkaMon: sampler:", line)
+        }
+
         onExited: root.alive = false
     }
 
