@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -12,7 +13,7 @@ Panel {
     // Wireframe polylines arrive via the sampler's meta line (QML XHR can't
     // read local files without an env override).
     readonly property var coastlines: Sampler.coastlines
-    property real rotation: 0
+    property real spin: 0
     property real pulse: 0
 
     Timer {
@@ -20,7 +21,7 @@ Panel {
         repeat: true
         running: root.visible
         onTriggered: {
-            root.rotation = (root.rotation + 0.35) % 360;
+            root.spin = (root.spin + 0.35) % 360;
             root.pulse = (root.pulse + 0.09) % 1;
             globe.requestPaint();
         }
@@ -32,11 +33,11 @@ Panel {
         anchors.fill: parent
 
         function project(lat, lon) {
-            // Orthographic projection, camera on the equator at `rotation`,
+            // Orthographic projection, camera on the equator at `spin`,
             // slight axial tilt for the eDEX look.
             const tilt = 18 * Math.PI / 180;
             const phi = lat * Math.PI / 180;
-            const lam = (lon + root.rotation) * Math.PI / 180;
+            const lam = (lon + root.spin) * Math.PI / 180;
             let x = Math.cos(phi) * Math.sin(lam);
             let y = Math.sin(phi);
             let z = Math.cos(phi) * Math.cos(lam);
@@ -154,6 +155,8 @@ Panel {
             model: Sampler.conns.slice(0, 8)
 
             Text {
+                required property var modelData
+
                 text: (modelData.country || "??") + " " + modelData.ip
                 font.family: Theme.monoFamily
                 font.pixelSize: Theme.fontSize - 4

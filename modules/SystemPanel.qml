@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -589,6 +590,10 @@ Panel {
         model: root.zones
 
         Item {
+            id: zoneItem
+
+            required property var modelData
+
             x: root.bx + modelData.x * root.bsx
             y: root.by + modelData.y * root.bsy
             width: modelData.w * root.bsx
@@ -612,7 +617,7 @@ Panel {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.zoneClicked(modelData.zone)
+                onClicked: root.zoneClicked(zoneItem.modelData.zone)
             }
 
             Rectangle {
@@ -626,8 +631,8 @@ Panel {
             Rectangle {
                 visible: zoneMouse.containsMouse
                 anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: modelData.chipBelow ? parent.bottom : undefined
-                anchors.bottom: modelData.chipBelow ? undefined : parent.top
+                anchors.top: zoneItem.modelData.chipBelow ? parent.bottom : undefined
+                anchors.bottom: zoneItem.modelData.chipBelow ? undefined : parent.top
                 anchors.topMargin: 4
                 anchors.bottomMargin: 4
                 width: chipLabel.implicitWidth + 12
@@ -640,7 +645,7 @@ Panel {
                     id: chipLabel
 
                     anchors.centerIn: parent
-                    text: parent.parent.chipText
+                    text: zoneItem.chipText
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 4
                     color: Theme.red

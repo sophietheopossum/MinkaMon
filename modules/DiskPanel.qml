@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -152,6 +153,8 @@ Panel {
             model: Object.keys(Sampler.disk.disks)
 
             Text {
+                required property string modelData
+
                 text: modelData + "  ◂ "
                     + Sampler.fmtBytes(Sampler.disk.disks[modelData].readBps)
                     + "  ▸ "

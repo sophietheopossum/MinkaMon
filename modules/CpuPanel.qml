@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -23,6 +24,8 @@ Panel {
             model: Sampler.cores
 
             Text {
+                required property int index
+
                 text: index
                 font.family: Theme.monoFamily
                 font.pixelSize: Theme.fontSize - 4

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import "../services"
@@ -151,27 +152,31 @@ Item {
                 model: root.columns
 
                 Item {
+                    id: headerCell
+
+                    required property var modelData
+
                     width: modelData.width > 0 ? modelData.width : root.flexWidth()
                     height: headerRow.height
 
                     Text {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
-                        horizontalAlignment: modelData.align
-                        leftPadding: modelData.key === "comm" ? 14 : 0
-                        text: modelData.label
-                            + (root.sortKey === modelData.key
+                        horizontalAlignment: headerCell.modelData.align
+                        leftPadding: headerCell.modelData.key === "comm" ? 14 : 0
+                        text: headerCell.modelData.label
+                            + (root.sortKey === headerCell.modelData.key
                                 ? (root.sortDesc ? " ▾" : " ▴") : "")
                         font.family: Theme.monoFamily
                         font.pixelSize: Theme.fontSize - 2
                         font.letterSpacing: 1
-                        color: root.sortKey === modelData.key
+                        color: root.sortKey === headerCell.modelData.key
                             ? Theme.red : Theme.textMuted
                     }
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: root.toggleSort(modelData.key)
+                        onClicked: root.toggleSort(headerCell.modelData.key)
                     }
                 }
             }
@@ -191,6 +196,11 @@ Item {
         model: root.sorted
 
         delegate: Rectangle {
+            id: procRow
+
+            required property var modelData
+            required property int index
+
             width: listView.width
             height: 24
             color: index % 2 === 0 ? "transparent" : Theme.surface
@@ -200,7 +210,7 @@ Item {
                 acceptedButtons: Qt.RightButton
                 onPressed: mouse => {
                     const p = mapToItem(root, mouse.x, mouse.y);
-                    root.openMenu(modelData, p.x, p.y);
+                    root.openMenu(procRow.modelData, p.x, p.y);
                 }
             }
 
@@ -215,7 +225,7 @@ Item {
                     height: parent.height
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignRight
-                    text: modelData.pid
+                    text: procRow.modelData.pid
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 2
                     color: Theme.textFaint
@@ -232,7 +242,7 @@ Item {
                         width: 16
                         height: 16
                         sourceSize: Qt.size(32, 32)
-                        source: root.iconFor(modelData.comm)
+                        source: root.iconFor(procRow.modelData.comm)
                     }
 
                     Text {
@@ -242,7 +252,7 @@ Item {
                         height: parent.height
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
-                        text: modelData.comm
+                        text: procRow.modelData.comm
                         font.family: Theme.monoFamily
                         font.pixelSize: Theme.fontSize - 2
                         color: Theme.text
@@ -254,10 +264,10 @@ Item {
                     height: parent.height
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignHCenter
-                    text: modelData.state
+                    text: procRow.modelData.state
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 2
-                    color: modelData.state === "R" ? Theme.okGreen : Theme.textFaint
+                    color: procRow.modelData.state === "R" ? Theme.okGreen : Theme.textFaint
                 }
 
                 Text {
@@ -265,11 +275,11 @@ Item {
                     height: parent.height
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignRight
-                    text: modelData.cpuPct.toFixed(1)
+                    text: procRow.modelData.cpuPct.toFixed(1)
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 2
-                    color: modelData.cpuPct >= 50 ? Theme.red
-                        : modelData.cpuPct >= 10 ? Theme.warnAmber : Theme.textMuted
+                    color: procRow.modelData.cpuPct >= 50 ? Theme.red
+                        : procRow.modelData.cpuPct >= 10 ? Theme.warnAmber : Theme.textMuted
                 }
 
                 Text {
@@ -277,7 +287,7 @@ Item {
                     height: parent.height
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignRight
-                    text: Sampler.fmtKb(modelData.rssKb)
+                    text: Sampler.fmtKb(procRow.modelData.rssKb)
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontSize - 2
                     color: Theme.textMuted
@@ -341,6 +351,10 @@ Item {
                 ]
 
                 Rectangle {
+                    id: optionRow
+
+                    required property var modelData
+
                     width: menuColumn.width
                     height: 28
                     color: optionArea.containsMouse ? Theme.redDim : "transparent"
@@ -349,11 +363,11 @@ Item {
                         anchors.fill: parent
                         leftPadding: 10
                         verticalAlignment: Text.AlignVCenter
-                        text: modelData.label
+                        text: optionRow.modelData.label
                         font.family: Theme.monoFamily
                         font.pixelSize: Theme.fontSize - 2
                         font.letterSpacing: 1
-                        color: modelData.sig === "KILL" && !optionArea.containsMouse
+                        color: optionRow.modelData.sig === "KILL" && !optionArea.containsMouse
                             ? Theme.red : Theme.text
                     }
 
@@ -362,7 +376,7 @@ Item {
                         rightPadding: 10
                         verticalAlignment: Text.AlignVCenter
                         horizontalAlignment: Text.AlignRight
-                        text: modelData.hint
+                        text: optionRow.modelData.hint
                         font.family: Theme.monoFamily
                         font.pixelSize: Theme.fontSize - 3
                         color: Theme.textFaint
@@ -372,7 +386,7 @@ Item {
                         id: optionArea
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: root.sendSignal(modelData.sig)
+                        onClicked: root.sendSignal(optionRow.modelData.sig)
                     }
                 }
             }

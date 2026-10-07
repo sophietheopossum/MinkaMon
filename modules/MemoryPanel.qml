@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -127,6 +128,8 @@ Panel {
                 model: root.cells
 
                 Rectangle {
+                    required property int index
+
                     width: (blockGrid.parent.width - 43 * 2) / 44
                     height: 7
                     color: {
@@ -180,10 +183,14 @@ Panel {
                 ]
 
                 Column {
+                    id: readout
+
+                    required property var modelData
+
                     spacing: 1
 
                     Text {
-                        text: modelData.label
+                        text: readout.modelData.label
                         font.family: Theme.monoFamily
                         font.pixelSize: Theme.fontSize - 3
                         font.letterSpacing: 1
@@ -191,10 +198,10 @@ Panel {
                     }
 
                     Text {
-                        text: modelData.value
+                        text: readout.modelData.value
                         font.family: Theme.monoFamily
                         font.pixelSize: Theme.fontSize
-                        color: modelData.tint
+                        color: readout.modelData.tint
                     }
                 }
             }

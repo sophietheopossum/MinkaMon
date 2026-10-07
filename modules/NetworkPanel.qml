@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -120,6 +121,8 @@ Panel {
             model: Object.keys(Sampler.net.ifaces)
 
             Text {
+                required property string modelData
+
                 text: modelData + "  ▼ "
                     + Sampler.fmtBytes(Sampler.net.ifaces[modelData].downBps)
                     + "  ▲ "

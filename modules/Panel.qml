@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -32,6 +33,7 @@ Item {
         model: 4
 
         Item {
+            required property int index
             readonly property bool isRight: index % 2 === 1
             readonly property bool isBottom: index >= 2
 

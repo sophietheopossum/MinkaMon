@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import "../services"
 
@@ -76,6 +77,9 @@ Panel {
                 model: root.engineKeys
 
                 Text {
+                    required property string modelData
+                    required property int index
+
                     text: root.engineNames[modelData]
                         || modelData.toUpperCase()
                     font.family: Theme.monoFamily
