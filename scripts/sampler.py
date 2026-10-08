@@ -258,16 +258,74 @@ def read_mem():
 
 # --- Intel xe via fdinfo ---
 
+def find_xe_nodes():
+    """/dev/dri paths of the card and render nodes bound to the xe driver."""
+    nodes = set()
+    for driver in glob.glob("/sys/class/drm/*/device/driver"):
+        try:
+            if os.path.basename(os.readlink(driver)) == "xe":
+                nodes.add("/dev/dri/" + driver.split("/")[4])
+        except OSError:
+            continue
+    return nodes
+
+
+XE_NODES = find_xe_nodes()
+# Every process's fd table is rescanned this often; new pids are scanned on
+# every tick. Globbing every /proc/*/fdinfo/* each tick instead opened ~4,900
+# files to find a few dozen DRM fds: ~285 ms of CPU per sample, about a
+# quarter of a core.
+XE_RESCAN_SECONDS = 10.0
+# fdinfo paths of known xe DRM fds, the pids already scanned, and when the
+# next full rescan is due.
+xe_scan = {"fds": set(), "pids": set(), "rescan_at": 0.0}
+
+
+def scan_xe_fds(pid):
+    """fdinfo paths of `pid`'s fds that point at an xe device node."""
+    fd_dir = f"/proc/{pid}/fd"
+    try:
+        fds = os.listdir(fd_dir)
+    except OSError:
+        return []
+    found = []
+    for fd in fds:
+        try:
+            if os.readlink(f"{fd_dir}/{fd}") in XE_NODES:
+                found.append(f"/proc/{pid}/fdinfo/{fd}")
+        except OSError:
+            continue
+    return found
+
+
 def read_xe_clients():
     """client-id -> {engine-class: (cycles, total_cycles)}"""
+    if not XE_NODES:
+        return {}
+    pids = {name for name in os.listdir("/proc") if name.isdigit()}
+    now = time.monotonic()
+    if now >= xe_scan["rescan_at"]:
+        # A full rescan also finds fds a process opened after its first scan.
+        xe_scan["fds"].clear()
+        new_pids = pids
+        xe_scan["rescan_at"] = now + XE_RESCAN_SECONDS
+    else:
+        new_pids = pids - xe_scan["pids"]
+    for pid in new_pids:
+        xe_scan["fds"].update(scan_xe_fds(pid))
+    xe_scan["pids"] = pids
+
     clients = {}
-    for fdinfo in glob.iglob("/proc/[0-9]*/fdinfo/*"):
+    for fdinfo in list(xe_scan["fds"]):
         try:
             with open(fdinfo) as f:
                 text = f.read(4096)
         except OSError:
+            xe_scan["fds"].discard(fdinfo)
             continue
+        # The process may have exited and its fd number been reused since the scan.
         if "drm-driver:\txe" not in text and "drm-driver: xe" not in text:
+            xe_scan["fds"].discard(fdinfo)
             continue
         client = None
         cycles, totals = {}, {}
