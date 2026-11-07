@@ -1,7 +1,9 @@
 pragma Singleton
 import Quickshell
-import Quickshell.Io
 import QtQuick
+// Through the config-root symlink: Quickshell only honours qmldir
+// registration for paths inside the shell root.
+import "../MinkaLink"
 
 // Runs scripts/sampler.py for the life of the app and mirrors its JSON-lines
 // stream into reactive properties. One sample per second; procs every 2s;
@@ -47,14 +49,13 @@ Singleton {
         return next;
     }
 
-    Process {
-        id: samplerProcess
-
+    CoreProcess {
         command: ["python3", root.scriptPath]
-        running: true
 
-        stdout: SplitParser {
-            onRead: line => {
+        // Restart the sampler if it dies (e.g. transient python error).
+        autoRestart: true
+
+        onLine: line => {
                 let sample;
                 try {
                     sample = JSON.parse(line);
@@ -89,23 +90,9 @@ Singleton {
                 root.writeHistory = root.pushHistory(root.writeHistory, root.disk.writeBps);
                 root.utilHistory = root.pushHistory(root.utilHistory, root.disk.utilPct || 0);
                 root.ticked();
-            }
         }
-
-        // Without a parser Quickshell closes the channel and Qt discards it.
-        stderr: SplitParser {
-            onRead: line => console.warn("MinkaMon: sampler:", line)
-        }
-
+        onStderrLine: line => console.warn("MinkaMon: sampler:", line)
         onExited: root.alive = false
-    }
-
-    // Restart the sampler if it dies (e.g. transient python error).
-    Timer {
-        interval: 3000
-        repeat: true
-        running: !samplerProcess.running
-        onTriggered: samplerProcess.running = true
     }
 
     function fmtBytes(bps) {
