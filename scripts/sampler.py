@@ -3,10 +3,15 @@
 
 Long-running process: emits one JSON object per line on stdout.
 
-  every tick (1s):  cpu, mem, gpu, temps, net
-  disk
-  every 2 ticks:    procs (full process table)
-  every 5 ticks:    conns (established TCP, geolocated offline)
+  every tick (1s):  cpu, mem, gpu, temps, net, disk
+  every 2 ticks:    procs (full process table), while demanded
+  every 5 ticks:    conns (established TCP, geolocated offline), while demanded
+  every 10 ticks:   nvidia (while the card is runtime-active)
+
+Demand arrives as JSON lines on stdin, e.g.
+{"wantProcs": true, "wantConns": false}. The QML shell sends it when the
+processes/globe satellites open or close, so the expensive collectors stay
+idle while nobody is looking at them.
 
 GPU notes for this machine (and portability):
   - Intel xe: busyness from /proc/*/fdinfo drm-cycles-*/drm-total-cycles-*
@@ -26,6 +31,7 @@ import glob
 import gzip
 import json
 import os
+import select
 import socket
 import struct
 import subprocess
@@ -37,6 +43,42 @@ ASSETS = os.path.join(HERE, "..", "assets")
 TICK_SECONDS = 1.0
 PROCS_EVERY = 2
 CONNS_EVERY = 5
+NVIDIA_EVERY = 10
+
+# Expensive slices are collected only while the shell asks for them.
+DEMAND = {"procs": False, "conns": False}
+_stdin_buf = b""
+_stdin_eof = False
+
+
+def poll_demand():
+    """Apply any pending JSON-lines demand updates from stdin."""
+    global _stdin_buf, _stdin_eof
+    if _stdin_eof:
+        return
+    try:
+        while select.select([0], [], [], 0)[0]:
+            chunk = os.read(0, 4096)
+            if not chunk:
+                _stdin_eof = True
+                return
+            _stdin_buf += chunk
+            while b"\n" in _stdin_buf:
+                line, _stdin_buf = _stdin_buf.split(b"\n", 1)
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(msg, dict):
+                    continue
+                for wire, field in (("wantProcs", "procs"),
+                                    ("wantConns", "conns"),
+                                    ("procs", "procs"),
+                                    ("conns", "conns")):
+                    if wire in msg:
+                        DEMAND[field] = bool(msg[wire])
+    except OSError:
+        _stdin_eof = True
 
 # Country centroids (approximate, for globe plotting): ISO 3166-1 alpha-2.
 CENTROIDS = {
@@ -275,7 +317,7 @@ XE_NODES = find_xe_nodes()
 # every tick. Globbing every /proc/*/fdinfo/* each tick instead opened ~4,900
 # files to find a few dozen DRM fds: ~285 ms of CPU per sample, about a
 # quarter of a core.
-XE_RESCAN_SECONDS = 10.0
+XE_RESCAN_SECONDS = 60.0
 # fdinfo paths of known xe DRM fds, the pids already scanned, and when the
 # next full rescan is due.
 xe_scan = {"fds": set(), "pids": set(), "rescan_at": 0.0}
@@ -435,8 +477,13 @@ def read_nvidia():
 
 # --- temperatures ---
 
-def read_temps():
-    temps = []
+TEMP_RESCAN_SECONDS = 60.0
+_temp_sensors = []
+_temp_rescan_at = 0.0
+
+
+def discover_temps():
+    sensors = []
     for hwmon in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
         try:
             with open(os.path.join(hwmon, "name")) as f:
@@ -444,11 +491,6 @@ def read_temps():
         except OSError:
             continue
         for input_path in sorted(glob.glob(os.path.join(hwmon, "temp*_input"))):
-            try:
-                with open(input_path) as f:
-                    milli = int(f.read().strip())
-            except (OSError, ValueError):
-                continue
             label_path = input_path.replace("_input", "_label")
             label = ""
             try:
@@ -457,11 +499,28 @@ def read_temps():
             except OSError:
                 pass
             sensor = os.path.basename(input_path)[: -len("_input")]
-            temps.append({
-                "chip": chip,
-                "label": label or sensor,
-                "c": round(milli / 1000.0, 1),
-            })
+            sensors.append((chip, label or sensor, input_path))
+    return sensors
+
+
+def read_temps():
+    global _temp_sensors, _temp_rescan_at
+    now = time.monotonic()
+    if now >= _temp_rescan_at:
+        _temp_sensors = discover_temps()
+        _temp_rescan_at = now + TEMP_RESCAN_SECONDS
+    temps = []
+    for chip, label, input_path in _temp_sensors:
+        try:
+            with open(input_path) as f:
+                milli = int(f.read().strip())
+        except (OSError, ValueError):
+            continue
+        temps.append({
+            "chip": chip,
+            "label": label,
+            "c": round(milli / 1000.0, 1),
+        })
     return temps
 
 
@@ -509,6 +568,23 @@ def net_rates(prev, cur, dt):
 
 # --- disk ---
 
+BLOCK_RESCAN_SECONDS = 30.0
+_block_disks = set()
+_block_rescan_at = 0.0
+
+
+def whole_disks():
+    global _block_disks, _block_rescan_at
+    now = time.monotonic()
+    if now >= _block_rescan_at:
+        try:
+            _block_disks = set(os.listdir("/sys/block"))
+        except OSError:
+            _block_disks = set()
+        _block_rescan_at = now + BLOCK_RESCAN_SECONDS
+    return _block_disks
+
+
 def read_disks():
     """name -> (read bytes, written bytes, io ms), whole disks only.
 
@@ -518,6 +594,7 @@ def read_disks():
     either. Sector counts in diskstats are always 512-byte units.
     """
     disks = {}
+    whole = whole_disks()
     try:
         with open("/proc/diskstats") as f:
             for line in f:
@@ -525,7 +602,7 @@ def read_disks():
                 name = parts[2]
                 if name.startswith(("loop", "ram", "zram", "dm-", "sr", "md")):
                     continue
-                if not os.path.isdir("/sys/block/" + name):
+                if name not in whole:
                     continue
                 disks[name] = (
                     int(parts[5]) * 512,
@@ -656,7 +733,7 @@ def main():
     prev_xe = read_xe_clients()
     prev_net = read_net()
     prev_disk = read_disks()
-    prev_procs = read_procs()
+    prev_procs = {}
     prev_time = time.monotonic()
     prev_procs_time = prev_time
     nvidia = read_nvidia()
@@ -682,10 +759,12 @@ def main():
         }
     }), flush=True)
 
+    poll_demand()
     tick = 0
     while True:
         time.sleep(TICK_SECONDS)
         tick += 1
+        poll_demand()
         now = time.monotonic()
         dt = max(now - prev_time, 1e-3)
 
@@ -694,7 +773,7 @@ def main():
         cur_net = read_net()
         cur_disk = read_disks()
 
-        if tick % 2 == 0:
+        if tick % NVIDIA_EVERY == 0:
             nvidia = read_nvidia()
 
         temps = read_temps()
@@ -713,16 +792,19 @@ def main():
             "net": net_rates(prev_net, cur_net, dt),
             "disk": disk_rates(prev_disk, cur_disk, dt),
         }
-        if tick % PROCS_EVERY == 0:
+        if DEMAND["procs"] and tick % PROCS_EVERY == 0:
             cur_procs = read_procs()
             sample["procs"] = proc_deltas(
-                prev_procs, 
+                prev_procs,
                 cur_procs,
                 max(now - prev_procs_time, 1e-3)
                 )
             prev_procs = cur_procs
             prev_procs_time = now
-        if tick % CONNS_EVERY == 1 or tick == 1:
+        elif not DEMAND["procs"]:
+            prev_procs = {}
+            prev_procs_time = now
+        if DEMAND["conns"] and tick % CONNS_EVERY == 1:
             sample["conns"] = read_connections()
 
         print(json.dumps(sample), flush=True)

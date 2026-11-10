@@ -6,8 +6,8 @@ import QtQuick
 import "../MinkaLink"
 
 // Runs scripts/sampler.py for the life of the app and mirrors its JSON-lines
-// stream into reactive properties. One sample per second; procs every 2s;
-// connections every 5s (see sampler.py header for the full contract).
+// stream into reactive properties. One sample per second; procs/connections
+// are demand-gated by the shell (see sampler.py header for the full contract).
 Singleton {
     id: root
 
@@ -22,6 +22,26 @@ Singleton {
     property string machineModel: ""
     property string chassisType: ""
     property var coastlines: []
+
+    // Demand switches for the expensive sampler slices. The shell binds
+    // these to the processes/globe satellite visibility; sendDemand()
+    // forwards every change to the sampler over stdin.
+    property bool wantProcs: false
+    property bool wantConns: false
+
+    onWantProcsChanged: sendDemand()
+    onWantConnsChanged: sendDemand()
+
+    function sendDemand() {
+        if (!wantProcs)
+            procs = [];
+        if (!wantConns)
+            conns = [];
+        samplerProc.write(JSON.stringify({
+            wantProcs: wantProcs,
+            wantConns: wantConns,
+        }) + "\n");
+    }
 
     // Last sample slices (see sampler.py for shapes).
     property var cpu: ({ total: 0, cores: [] })
@@ -50,10 +70,14 @@ Singleton {
     }
 
     CoreProcess {
-        command: ["python3", root.scriptPath]
+        id: samplerProc
+
+        command: ["python3", "-B", root.scriptPath]
 
         // Restart the sampler if it dies (e.g. transient python error).
         autoRestart: true
+
+        onStarted: root.sendDemand()
 
         onLine: line => {
                 let sample;

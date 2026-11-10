@@ -845,6 +845,20 @@ ShellRoot {
             || cpuTempWin.visible || gpuTempWin.visible)
     }
 
+    // The process table and connection list are the sampler's expensive
+    // slices; collect them only while their satellites are open.
+    Binding {
+        target: Sampler
+        property: "wantProcs"
+        value: procWin.visible
+    }
+
+    Binding {
+        target: Sampler
+        property: "wantConns"
+        value: globeWin.visible
+    }
+
     // Leader lines from schematic components to satellite window borders,
     // one click-through overlay per screen.
     Variants {

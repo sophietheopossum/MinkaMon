@@ -12,8 +12,14 @@ Canvas {
 
     property var hist: []
 
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
+    function repaintIfVisible() {
+        if (visible)
+            requestPaint();
+    }
+
+    onWidthChanged: repaintIfVisible()
+    onHeightChanged: repaintIfVisible()
+    onVisibleChanged: repaintIfVisible()
 
     Connections {
         target: Sampler
@@ -26,7 +32,7 @@ Canvas {
                 next.push(h);
             }
             root.hist = next;
-            root.requestPaint();
+            root.repaintIfVisible();
         }
     }
 

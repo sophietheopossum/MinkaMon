@@ -10,9 +10,15 @@ Canvas {
     property color lineColor: Theme.red
     property color fillColor: Theme.gaugeDim
 
-    onValuesChanged: requestPaint()
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
+    function repaintIfVisible() {
+        if (visible)
+            requestPaint();
+    }
+
+    onValuesChanged: repaintIfVisible()
+    onWidthChanged: repaintIfVisible()
+    onHeightChanged: repaintIfVisible()
+    onVisibleChanged: repaintIfVisible()
 
     onPaint: {
         const ctx = getContext("2d");
