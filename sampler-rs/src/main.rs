@@ -476,7 +476,7 @@ struct XeScan {
 
 fn scan_xe_fds(pid: u32, xe_nodes: &HashSet<PathBuf>, out: &mut HashSet<PathBuf>) {
     let fd_dir = PathBuf::from(format!("/proc/{}/fd", pid));
-    for fd_path in read_dir_sorted(&fd_dir) {
+    for fd_path in read_dir_paths(&fd_dir) {
         let Ok(target) = fs::read_link(&fd_path) else {
             continue;
         };
@@ -495,7 +495,7 @@ fn read_xe_clients(scan: &mut XeScan, xe_nodes: &HashSet<PathBuf>) -> XeClients 
     if xe_nodes.is_empty() {
         return clients;
     }
-    let pids: HashSet<u32> = read_dir_sorted("/proc")
+    let pids: HashSet<u32> = read_dir_paths("/proc")
         .iter()
         .filter_map(|p| file_name(p).parse::<u32>().ok())
         .collect();
@@ -513,16 +513,16 @@ fn read_xe_clients(scan: &mut XeScan, xe_nodes: &HashSet<PathBuf>) -> XeClients 
     }
     scan.pids = pids;
 
-    for fdinfo in scan.fds.clone() {
-        let Some(bytes) = read_bytes(&fdinfo) else {
-            scan.fds.remove(&fdinfo);
-            continue;
-        };
-        let text = String::from_utf8_lossy(&bytes[..bytes.len().min(4096)]);
-        if !text.contains("drm-driver:\txe") && !text.contains("drm-driver: xe") {
-            scan.fds.remove(&fdinfo);
+    let mut scratch: Vec<u8> = Vec::with_capacity(8192);
+    for fdinfo in std::mem::take(&mut scan.fds) {
+        if !read_bytes_into(&fdinfo, &mut scratch) {
             continue;
         }
+        let text = String::from_utf8_lossy(&scratch[..scratch.len().min(4096)]);
+        if !text.contains("drm-driver:\txe") && !text.contains("drm-driver: xe") {
+            continue;
+        }
+        scan.fds.insert(fdinfo);
         let mut client: Option<String> = None;
         let mut cycles: BTreeMap<String, u64> = BTreeMap::new();
         let mut totals: BTreeMap<String, u64> = BTreeMap::new();
@@ -961,13 +961,14 @@ type ProcMap = BTreeMap<u32, ProcInfo>;
 
 fn read_procs(page_kb: u64) -> ProcMap {
     let mut procs = BTreeMap::new();
-    for entry in read_dir_sorted("/proc") {
+    let mut data: Vec<u8> = Vec::with_capacity(8192);
+    for entry in read_dir_paths("/proc") {
         let Ok(pid) = file_name(&entry).parse::<u32>() else {
             continue;
         };
-        let Some(data) = read_bytes(entry.join("stat")) else {
+        if !read_bytes_into(entry.join("stat"), &mut data) {
             continue;
-        };
+        }
         let Some(first_space) = data.iter().position(|b| *b == b' ') else {
             continue;
         };
@@ -982,7 +983,7 @@ fn read_procs(page_kb: u64) -> ProcMap {
             continue;
         }
         let comm = String::from_utf8_lossy(&rest[lparen + 1..rparen]).into_owned();
-        let fields_text = String::from_utf8_lossy(&rest[rparen + 2..]).into_owned();
+        let fields_text = String::from_utf8_lossy(&rest[rparen + 2..]);
         let fields: Vec<&str> = fields_text.split_whitespace().collect();
         if fields.len() <= 21 {
             continue;
