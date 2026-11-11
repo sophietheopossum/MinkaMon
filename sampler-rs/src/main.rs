@@ -2,24 +2,27 @@
 //!
 //! Long-running process: emits one JSON object per line on stdout.
 //!
-//!   every tick (1s):  cpu, mem, gpu, temps, net, disk
+//!   every tick:       cpu, mem, gpu, temps, net, disk
 //!   every 2 ticks:    procs (full process table), while demanded
 //!   every 5 ticks:    conns (established TCP, geolocated offline), while demanded
 //!   every 10 ticks:   nvidia (while the card is runtime-active)
 //!
-//! Demand arrives as JSON lines on stdin, e.g.
-//! {"wantProcs": true, "wantConns": false}. The QML shell sends it when the
-//! processes/globe satellites open or close, so expensive collectors stay
-//! idle while nobody is looking at them.
+//! The tick is adaptive: 1s while the shell is interactive (hovered or a
+//! satellite is open), 5s while it is only a backdrop. Demand arrives as
+//! JSON lines on stdin, e.g. {"wantProcs": true, "wantConns": false,
+//! "tickMs": 1000}. The QML shell sends it when satellites open/close or the
+//! pointer enters/leaves MinkaMon, so expensive collectors stay idle while
+//! nobody is looking at them. Geo data for conns loads lazily on first use.
 //!
 //! GPU notes for this machine (and portability):
 //!   - Intel xe: busyness from /proc/*/fdinfo drm-cycles-*/drm-total-cycles-*
 //!     deltas summed across DRM clients (the nvtop method); frequency from
 //!     /sys/class/drm/cardN/device/tile0/gt0/freq0/act_freq.
-//!   - NVIDIA proprietary: nvidia-smi — but ONLY while the card's PCI
-//!     runtime_status is "active". Polling nvidia-smi wakes a runtime-suspended
+//!   - NVIDIA proprietary: NVML — but ONLY while the card's PCI
+//!     runtime_status is "active". Polling the card wakes a runtime-suspended
 //!     Optimus dGPU and keeps it awake, wrecking battery; a suspended card is
-//!     reported as {"asleep": true} instead.
+//!     reported as {"asleep": true} instead. `nvidia-smi` remains only as a
+//!     fallback if NVML cannot be loaded.
 //!
 //! IP geolocation is fully offline: bundled iptoasn ipv4 table (PDDL-1.0)
 //! mapped to country centroids. Nothing leaves the machine.
@@ -124,16 +127,34 @@ fn opt_u64(value: Option<u64>) -> Value {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 struct Demand {
     procs: bool,
     conns: bool,
+    tick_ms: u64,
+}
+
+impl Default for Demand {
+    fn default() -> Self {
+        Self {
+            procs: false,
+            conns: false,
+            tick_ms: FAST_TICK_MS,
+        }
+    }
+}
+
+impl Demand {
+    fn interval(&self) -> Duration {
+        Duration::from_millis(self.tick_ms.clamp(MIN_TICK_MS, MAX_TICK_MS))
+    }
 }
 
 #[derive(Clone, Copy)]
 struct DemandUpdate {
     procs: Option<bool>,
     conns: Option<bool>,
+    tick_ms: Option<u64>,
 }
 
 fn spawn_demand_reader() -> Receiver<DemandUpdate> {
@@ -150,11 +171,29 @@ fn spawn_demand_reader() -> Receiver<DemandUpdate> {
                 keys.iter()
                     .find_map(|key| obj.get(*key).and_then(Value::as_bool))
             };
+            let tick_ms = obj
+                .get("tickMs")
+                .or_else(|| obj.get("tick_ms"))
+                .or_else(|| obj.get("intervalMs"))
+                .and_then(Value::as_u64)
+                .map(|v| v.clamp(MIN_TICK_MS, MAX_TICK_MS))
+                .or_else(|| {
+                    obj.get("eco").and_then(Value::as_bool).map(|eco| {
+                        if eco {
+                            ECO_TICK_MS
+                        } else {
+                            FAST_TICK_MS
+                        }
+                    })
+                });
             let update = DemandUpdate {
                 procs: get(&["wantProcs", "procs"]),
                 conns: get(&["wantConns", "conns"]),
+                tick_ms,
             };
-            if (update.procs.is_some() || update.conns.is_some()) && tx.send(update).is_err() {
+            if (update.procs.is_some() || update.conns.is_some() || update.tick_ms.is_some())
+                && tx.send(update).is_err()
+            {
                 break;
             }
         }
@@ -170,6 +209,23 @@ fn drain_demand(rx: &Receiver<DemandUpdate>, demand: &mut Demand) {
         if let Some(v) = update.conns {
             demand.conns = v;
         }
+        if let Some(v) = update.tick_ms {
+            demand.tick_ms = v.clamp(MIN_TICK_MS, MAX_TICK_MS);
+        }
+    }
+}
+
+fn wait_for_tick(rx: &Receiver<DemandUpdate>, demand: &mut Demand, prev_time: Instant) {
+    // Sleep in short slices so a mouse-over can pull an eco tick back to
+    // the fast cadence within ~100ms instead of after the full 5s.
+    loop {
+        drain_demand(rx, demand);
+        let deadline = prev_time + demand.interval();
+        let now = Instant::now();
+        if now >= deadline {
+            return;
+        }
+        thread::sleep((deadline - now).min(Duration::from_millis(100)));
     }
 }
 
