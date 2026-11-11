@@ -30,9 +30,9 @@
 mod centroids;
 
 use flate2::read::GzDecoder;
+use libloading::Library;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::ffi::{c_int, c_long};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufWriter, Read, Write};
 use std::net::Ipv4Addr;
@@ -683,7 +683,113 @@ fn find_nvidia_pci() -> Option<PathBuf> {
     None
 }
 
-fn read_nvidia(pci: Option<&Path>) -> Value {
+type NvmlResult = libc::c_int;
+const NVML_SUCCESS: NvmlResult = 0;
+type NvmlInit = unsafe extern "C" fn() -> NvmlResult;
+type NvmlGetHandle = unsafe extern "C" fn(libc::c_uint, *mut *mut libc::c_void) -> NvmlResult;
+type NvmlGetUtilization =
+    unsafe extern "C" fn(*mut libc::c_void, *mut NvmlUtilization) -> NvmlResult;
+type NvmlGetTemperature =
+    unsafe extern "C" fn(*mut libc::c_void, libc::c_int, *mut libc::c_uint) -> NvmlResult;
+type NvmlGetMemoryInfo = unsafe extern "C" fn(*mut libc::c_void, *mut NvmlMemory) -> NvmlResult;
+type NvmlGetPowerUsage = unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_uint) -> NvmlResult;
+
+#[repr(C)]
+struct NvmlUtilization {
+    gpu: libc::c_uint,
+    memory: libc::c_uint,
+}
+
+#[repr(C)]
+struct NvmlMemory {
+    total: libc::c_ulonglong,
+    free: libc::c_ulonglong,
+    used: libc::c_ulonglong,
+}
+
+struct Nvml {
+    _lib: Library,
+    device: usize,
+}
+
+impl Nvml {
+    fn load() -> Option<Self> {
+        unsafe {
+            let lib = Library::new("libnvidia-ml.so.1").ok()?;
+            let init: libloading::Symbol<NvmlInit> = lib.get(b"nvmlInit_v2\0").ok()?;
+            if init() != NVML_SUCCESS {
+                return None;
+            }
+            let get_handle: libloading::Symbol<NvmlGetHandle> =
+                lib.get(b"nvmlDeviceGetHandleByIndex_v2\0").ok()?;
+            let mut device: *mut libc::c_void = std::ptr::null_mut();
+            if get_handle(0, &mut device) != NVML_SUCCESS || device.is_null() {
+                return None;
+            }
+            Some(Self {
+                _lib: lib,
+                device: device as usize,
+            })
+        }
+    }
+
+    fn read(&self) -> Option<Value> {
+        unsafe {
+            let device = self.device as *mut libc::c_void;
+            let get_util: libloading::Symbol<NvmlGetUtilization> =
+                self._lib.get(b"nvmlDeviceGetUtilizationRates\0").ok()?;
+            let mut util = NvmlUtilization { gpu: 0, memory: 0 };
+            if get_util(device, &mut util) != NVML_SUCCESS {
+                return None;
+            }
+            let get_temp: libloading::Symbol<NvmlGetTemperature> =
+                self._lib.get(b"nvmlDeviceGetTemperature\0").ok()?;
+            let mut temp: libc::c_uint = 0;
+            // NVML_TEMPERATURE_GPU = 0
+            if get_temp(device, 0, &mut temp) != NVML_SUCCESS {
+                return None;
+            }
+            let get_mem: libloading::Symbol<NvmlGetMemoryInfo> =
+                self._lib.get(b"nvmlDeviceGetMemoryInfo\0").ok()?;
+            let mut mem = NvmlMemory {
+                total: 0,
+                free: 0,
+                used: 0,
+            };
+            if get_mem(device, &mut mem) != NVML_SUCCESS {
+                return None;
+            }
+            let power = self
+                ._lib
+                .get::<NvmlGetPowerUsage>(b"nvmlDeviceGetPowerUsage\0")
+                .ok()
+                .and_then(|get_power| {
+                    let mut milliwatts: libc::c_uint = 0;
+                    if get_power(device, &mut milliwatts) == NVML_SUCCESS {
+                        Some(milliwatts as f64 / 1000.0)
+                    } else {
+                        None
+                    }
+                });
+            Some(json!({
+                "asleep": false,
+                "utilPct": util.gpu as f64,
+                "tempC": temp as f64,
+                "memUsedMb": mem.used as f64 / 1_048_576.0,
+                "memTotalMb": mem.total as f64 / 1_048_576.0,
+                "powerW": opt_f64(power),
+            }))
+        }
+    }
+}
+
+#[derive(Default)]
+struct NvidiaState {
+    nvml: Option<Nvml>,
+    nvml_unavailable: bool,
+}
+
+fn read_nvidia(pci: Option<&Path>, state: &mut NvidiaState) -> Value {
     let Some(pci) = pci else {
         return Value::Null;
     };
@@ -692,6 +798,24 @@ fn read_nvidia(pci: Option<&Path>) -> Value {
     if status == "suspended" {
         return json!({"asleep": true});
     }
+    if state.nvml.is_none() && !state.nvml_unavailable {
+        match Nvml::load() {
+            Some(nvml) => state.nvml = Some(nvml),
+            None => state.nvml_unavailable = true,
+        }
+    }
+    if let Some(nvml) = &state.nvml {
+        if let Some(value) = nvml.read() {
+            return value;
+        }
+        // Drop a bad handle and fall through to the old path this tick;
+        // a later active poll can try NVML again.
+        state.nvml = None;
+    }
+    read_nvidia_smi()
+}
+
+fn read_nvidia_smi() -> Value {
     let Ok(output) = Command::new("timeout")
         .args([
             "3",
