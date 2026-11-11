@@ -865,6 +865,8 @@ fn read_nvidia_smi() -> Value {
 struct TempCache {
     sensors: Vec<(String, String, PathBuf)>,
     rescan_at: Option<Instant>,
+    readings: Vec<TempReading>,
+    read_at: Option<Instant>,
 }
 
 fn discover_temps() -> Vec<(String, String, PathBuf)> {
@@ -891,11 +893,19 @@ fn discover_temps() -> Vec<(String, String, PathBuf)> {
     sensors
 }
 
-fn read_temps(cache: &mut TempCache) -> Vec<TempReading> {
+fn read_temps(cache: &mut TempCache) -> &[TempReading] {
     let now = Instant::now();
     if cache.rescan_at.map(|at| now >= at).unwrap_or(true) {
         cache.sensors = discover_temps();
         cache.rescan_at = Some(now + Duration::from_secs_f64(TEMP_RESCAN_SECONDS));
+        cache.read_at = None;
+    }
+    let stale = cache
+        .read_at
+        .map(|at| now.duration_since(at).as_secs_f64() >= TEMP_READ_SECONDS)
+        .unwrap_or(true);
+    if !stale {
+        return &cache.readings;
     }
     let mut temps = Vec::new();
     for (chip, label, path) in &cache.sensors {
@@ -908,7 +918,9 @@ fn read_temps(cache: &mut TempCache) -> Vec<TempReading> {
             c: round1(milli as f64 / 1000.0),
         });
     }
-    temps
+    cache.readings = temps;
+    cache.read_at = Some(now);
+    &cache.readings
 }
 
 fn temps_json(temps: &[TempReading]) -> Value {
