@@ -486,6 +486,18 @@ ShellRoot {
             anchors.fill: parent
             color: Theme.ground
 
+            HoverHandler {
+                id: satHover
+
+                onHoveredChanged: hovered
+                    ? Sampler.hoverEntered() : Sampler.hoverExited()
+            }
+
+            Component.onDestruction: {
+                if (satHover.hovered)
+                    Sampler.hoverExited();
+            }
+
             Item {
                 id: inner
 
@@ -601,6 +613,18 @@ ShellRoot {
 
             anchors.fill: parent
             color: Theme.ground
+
+            HoverHandler {
+                id: mainHover
+
+                onHoveredChanged: hovered
+                    ? Sampler.hoverEntered() : Sampler.hoverExited()
+            }
+
+            Component.onDestruction: {
+                if (mainHover.hovered)
+                    Sampler.hoverExited();
+            }
 
             Rectangle {
                 id: topBar
@@ -857,6 +881,19 @@ ShellRoot {
         target: Sampler
         property: "wantConns"
         value: globeWin.visible
+    }
+
+    // Fast 1s sampling while the pointer is over MinkaMon — including the
+    // ScreenPad backdrop — or while any satellite is open. Otherwise the
+    // sampler drops to its 5s eco tick.
+    Binding {
+        target: Sampler
+        property: "interactive"
+        value: Sampler.hovered || cpuWin.visible || gpuWin.visible
+            || memWin.visible || netWin.visible || diskWin.visible
+            || globeWin.visible || procWin.visible || ssdTempWin.visible
+            || boardTempWin.visible || wifiTempWin.visible
+            || cpuTempWin.visible || gpuTempWin.visible
     }
 
     // Leader lines from schematic components to satellite window borders,
