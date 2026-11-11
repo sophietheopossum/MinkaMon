@@ -11,7 +11,7 @@ Canvas {
     property color fillColor: Theme.gaugeDim
 
     function repaintIfVisible() {
-        if (visible)
+        if (visible && (!window || window.visible))
             requestPaint();
     }
 

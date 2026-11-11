@@ -13,7 +13,7 @@ Canvas {
     property var hist: []
 
     function repaintIfVisible() {
-        if (visible)
+        if (visible && (!window || window.visible))
             requestPaint();
     }
 
