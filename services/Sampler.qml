@@ -6,8 +6,9 @@ import QtQuick
 import "../MinkaLink"
 
 // Runs sampler-rs for the life of the app and mirrors its JSON-lines stream
-// into reactive properties. One sample per second; procs/connections are
-// demand-gated by the shell (see sampler-rs/src/main.rs for the contract).
+// into reactive properties. The sampler tick is adaptive (1s interactive,
+// 5s backdrop); procs/connections are demand-gated by the shell (see
+// sampler-rs/src/main.rs for the contract).
 Singleton {
     id: root
 
@@ -34,8 +35,24 @@ Singleton {
     property bool wantProcs: false
     property bool wantConns: false
 
+    // Adaptive cadence: fast while the pointer is over MinkaMon or any
+    // satellite is open, eco while it is only a backdrop. Hover handlers in
+    // the shell keep hoverCount balanced across the main host and satellites.
+    property bool interactive: true
+    property int hoverCount: 0
+    readonly property bool hovered: hoverCount > 0
+
+    function hoverEntered() {
+        hoverCount += 1;
+    }
+
+    function hoverExited() {
+        hoverCount = Math.max(0, hoverCount - 1);
+    }
+
     onWantProcsChanged: sendDemand()
     onWantConnsChanged: sendDemand()
+    onInteractiveChanged: sendDemand()
 
     function sendDemand() {
         if (!wantProcs)
@@ -45,6 +62,7 @@ Singleton {
         samplerProc.write(JSON.stringify({
             wantProcs: wantProcs,
             wantConns: wantConns,
+            tickMs: interactive ? 1000 : 5000,
         }) + "\n");
     }
 
