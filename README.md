@@ -29,12 +29,14 @@ qs -p /path/to/MinkaMon
 
 ## Architecture
 
-`sampler-rs` (Rust) streams JSON lines once per second;
+`sampler-rs` (Rust) streams JSON lines adaptively: 1s while MinkaMon is
+hovered or a satellite is open, 5s while it is only a backdrop.
 `services/Sampler.qml` mirrors the stream into reactive properties the
 panels bind to. Process and connection slices are demand-gated by satellite
-visibility. No polling from QML, one sampler process, nothing leaves the
-machine. `scripts/sampler.py` is the previous implementation, kept as a
-reference/fallback.
+visibility, geo data loads on first Globe use, NVIDIA stats come from NVML,
+and the sampler runs at idle CPU/IO priority. No polling from QML, one
+sampler process, nothing leaves the machine. `scripts/sampler.py` is the
+previous implementation, kept as a reference/fallback.
 
 ## Bundled data
 
