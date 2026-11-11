@@ -255,7 +255,9 @@ fn assets_dir() -> PathBuf {
 #[derive(Default)]
 struct IpTable {
     starts: Vec<u32>,
-    countries: Vec<String>,
+    // Two-byte ISO codes, [0, 0] for unassigned/private table sentinels.
+    // Interning avoids ~300k tiny String allocations for mostly "-" rows.
+    countries: Vec<[u8; 2]>,
 }
 
 impl IpTable {
@@ -278,12 +280,18 @@ impl IpTable {
                 continue;
             };
             table.starts.push(start);
-            table.countries.push(country.trim().to_owned());
+            let country = country.trim().as_bytes();
+            let code = if country.len() == 2 && country.iter().all(|b| b.is_ascii_alphabetic()) {
+                [country[0], country[1]]
+            } else {
+                [0, 0]
+            };
+            table.countries.push(code);
         }
         table
     }
 
-    fn country_for_ip(&self, ip: Ipv4Addr) -> Option<&str> {
+    fn country_code_for_ip(&self, ip: Ipv4Addr) -> Option<[u8; 2]> {
         if self.starts.is_empty() {
             return None;
         }
@@ -292,11 +300,11 @@ impl IpTable {
         if idx == 0 {
             return None;
         }
-        let country = self.countries.get(idx - 1)?.as_str();
-        if matches!(country, "-" | "None" | "") {
+        let code = *self.countries.get(idx - 1)?;
+        if code == [0, 0] {
             None
         } else {
-            Some(country)
+            Some(code)
         }
     }
 }
@@ -984,7 +992,10 @@ fn read_connections(ip_table: &IpTable) -> Value {
     }
     let mut conns = Vec::new();
     for (ip, port) in ordered.into_iter().take(64) {
-        let country = ip_table.country_for_ip(ip);
+        let country_code = ip_table.country_code_for_ip(ip);
+        let country = country_code
+            .as_ref()
+            .and_then(|code| std::str::from_utf8(code).ok());
         let mut entry = Map::new();
         entry.insert("ip".to_owned(), json!(ip.to_string()));
         entry.insert("port".to_owned(), json!(port));
