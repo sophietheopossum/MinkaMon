@@ -425,7 +425,7 @@ fn cpu_json(
 
 // --- memory ---
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Zone {
     name: String,
     start_kb: u64,
@@ -472,7 +472,28 @@ fn read_zones(page_kb: u64) -> Vec<Zone> {
     zones
 }
 
-fn read_mem(page_kb: u64) -> Value {
+#[derive(Default)]
+struct MemCache {
+    zones: Vec<Zone>,
+    zones_read_at: Option<Instant>,
+}
+
+impl MemCache {
+    fn zones(&mut self, page_kb: u64) -> &[Zone] {
+        let now = Instant::now();
+        let stale = self
+            .zones_read_at
+            .map(|at| now.duration_since(at).as_secs_f64() >= ZONE_READ_SECONDS)
+            .unwrap_or(true);
+        if stale {
+            self.zones = read_zones(page_kb);
+            self.zones_read_at = Some(now);
+        }
+        &self.zones
+    }
+}
+
+fn read_mem(page_kb: u64, cache: &mut MemCache) -> Value {
     let mut fields: HashMap<String, u64> = HashMap::new();
     if let Some(text) = read_string("/proc/meminfo") {
         for line in text.lines() {
@@ -489,8 +510,9 @@ fn read_mem(page_kb: u64) -> Value {
     let available = get("MemAvailable");
     let swap_total = get("SwapTotal");
     let swap_free = get("SwapFree");
-    let zones: Vec<Value> = read_zones(page_kb)
-        .into_iter()
+    let zones: Vec<Value> = cache
+        .zones(page_kb)
+        .iter()
         .map(|z| {
             json!({
                 "name": z.name,
