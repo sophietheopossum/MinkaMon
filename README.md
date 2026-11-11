@@ -4,6 +4,7 @@ The Minka system monitor — eDEX-UI-inspired instrument panels in the
 Eternal Darkness palette.
 
 ```sh
+cargo build --release --manifest-path sampler-rs/Cargo.toml
 qs -p /path/to/MinkaMon
 ```
 
@@ -28,10 +29,12 @@ qs -p /path/to/MinkaMon
 
 ## Architecture
 
-`scripts/sampler.py` (stdlib-only Python) streams JSON lines once per
-second; `services/Sampler.qml` mirrors the stream into reactive
-properties the panels bind to. No polling from QML, one process, nothing
-leaves the machine.
+`sampler-rs` (Rust) streams JSON lines once per second;
+`services/Sampler.qml` mirrors the stream into reactive properties the
+panels bind to. Process and connection slices are demand-gated by satellite
+visibility. No polling from QML, one sampler process, nothing leaves the
+machine. `scripts/sampler.py` is the previous implementation, kept as a
+reference/fallback.
 
 ## Bundled data
 

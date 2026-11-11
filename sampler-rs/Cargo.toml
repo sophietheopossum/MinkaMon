@@ -1,0 +1,16 @@
+[package]
+name = "minkamon-sampler"
+version = "0.1.0"
+edition = "2021"
+description = "Rust system sampler for MinkaMon: JSON-lines stats over stdio"
+
+[[bin]]
+name = "minkamon-sampler"
+path = "src/main.rs"
+
+[dependencies]
+flate2 = "1"
+serde_json = "1"
+
+[profile.release]
+lto = "thin"

@@ -5,14 +5,19 @@ import QtQuick
 // registration for paths inside the shell root.
 import "../MinkaLink"
 
-// Runs scripts/sampler.py for the life of the app and mirrors its JSON-lines
-// stream into reactive properties. One sample per second; procs/connections
-// are demand-gated by the shell (see sampler.py header for the full contract).
+// Runs sampler-rs for the life of the app and mirrors its JSON-lines stream
+// into reactive properties. One sample per second; procs/connections are
+// demand-gated by the shell (see sampler-rs/src/main.rs for the contract).
 Singleton {
     id: root
 
-    readonly property string scriptPath: {
-        return Qt.resolvedUrl("../scripts/sampler.py")
+    readonly property string samplerBin: {
+        return Qt.resolvedUrl("../sampler-rs/target/release/minkamon-sampler")
+            .toString().replace("file://", "");
+    }
+
+    readonly property string assetsPath: {
+        return Qt.resolvedUrl("../assets")
             .toString().replace("file://", "");
     }
 
@@ -43,7 +48,7 @@ Singleton {
         }) + "\n");
     }
 
-    // Last sample slices (see sampler.py for shapes).
+    // Last sample slices (see sampler-rs/src/main.rs for shapes).
     property var cpu: ({ total: 0, cores: [] })
     property var mem: null
     property var gpu: null
@@ -72,9 +77,9 @@ Singleton {
     CoreProcess {
         id: samplerProc
 
-        command: ["python3", "-B", root.scriptPath]
+        command: [root.samplerBin, root.assetsPath]
 
-        // Restart the sampler if it dies (e.g. transient python error).
+        // Restart the sampler if it dies (e.g. transient sampler error).
         autoRestart: true
 
         onStarted: root.sendDemand()
