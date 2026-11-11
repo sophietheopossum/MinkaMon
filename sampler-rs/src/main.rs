@@ -67,11 +67,27 @@ fn sysconf_or(name: c_int, fallback: u64) -> u64 {
 }
 
 fn page_kb() -> u64 {
-    sysconf_or(SC_PAGESIZE, 4096) / 1024
+    sysconf_or(libc::_SC_PAGESIZE, 4096) / 1024
 }
 
 fn clock_ticks() -> u64 {
-    sysconf_or(SC_CLK_TCK, 100)
+    sysconf_or(libc::_SC_CLK_TCK, 100)
+}
+
+fn set_idle_priority() {
+    // Best effort: a monitor should lose every scheduling fight against the
+    // work it is watching, especially bulk copies on the same SSD.
+    unsafe {
+        libc::setpriority(libc::PRIO_PROCESS, 0, 19);
+        const IOPRIO_WHO_PROCESS: libc::c_int = 1;
+        const IOPRIO_CLASS_IDLE: libc::c_int = 3;
+        libc::syscall(
+            libc::SYS_ioprio_set,
+            IOPRIO_WHO_PROCESS,
+            0,
+            IOPRIO_CLASS_IDLE << 13,
+        );
+    }
 }
 
 fn read_bytes(path: impl AsRef<Path>) -> Option<Vec<u8>> {
