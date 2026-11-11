@@ -1030,6 +1030,26 @@ fn proc_deltas(prev: &ProcMap, cur: &ProcMap, dt: f64, clock: u64, num_cpus: usi
     Value::Array(out.into_iter().map(|(_, v)| v).collect())
 }
 
+fn meta_value(
+    cores: usize,
+    has_nvidia: bool,
+    geo_ranges: usize,
+    model: &str,
+    chassis: &str,
+    coastlines: Value,
+) -> Value {
+    json!({
+        "meta": {
+            "cores": cores,
+            "hasNvidia": has_nvidia,
+            "geoRanges": geo_ranges,
+            "model": model,
+            "chassis": chassis,
+            "coastlines": coastlines,
+        }
+    })
+}
+
 fn load_coastlines(assets: &Path) -> Value {
     let Some(text) = read_string(assets.join("coastlines.json")) else {
         return json!([]);
@@ -1045,14 +1065,18 @@ fn write_line(out: &mut impl Write, value: &Value) -> io::Result<()> {
 }
 
 fn run() -> io::Result<()> {
+    set_idle_priority();
     let demand_rx = spawn_demand_reader();
     let mut demand = Demand::default();
     let assets = assets_dir();
-    let ip_table = IpTable::load(&assets);
+    let mut ip_table = IpTable::default();
+    let mut coastlines = json!([]);
+    let mut geo_loaded = false;
     let core_ids = read_core_ids();
     let xe_nodes = find_xe_nodes();
     let mut xe_scan = XeScan::default();
     let mut temp_cache = TempCache::default();
+    let mut mem_cache = MemCache::default();
     let mut block_cache = BlockCache::default();
     let page_kb = page_kb();
     let clock = clock_ticks();
@@ -1066,32 +1090,46 @@ fn run() -> io::Result<()> {
     let mut prev_time = Instant::now();
     let mut prev_procs_time = prev_time;
     let nvidia_pci = find_nvidia_pci();
-    let mut nvidia = read_nvidia(nvidia_pci.as_deref());
+    let mut nvidia_state = NvidiaState::default();
+    let mut nvidia = read_nvidia(nvidia_pci.as_deref(), &mut nvidia_state);
 
-    let coastlines = load_coastlines(&assets);
     let (model, chassis) = read_dmi();
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout.lock());
     write_line(
         &mut out,
-        &json!({
-            "meta": {
-                "cores": prev_cpu.len().saturating_sub(1),
-                "hasNvidia": nvidia_pci.is_some(),
-                "geoRanges": ip_table.starts.len(),
-                "model": model,
-                "chassis": chassis,
-                "coastlines": coastlines,
-            }
-        }),
+        &meta_value(
+            prev_cpu.len().saturating_sub(1),
+            nvidia_pci.is_some(),
+            ip_table.starts.len(),
+            &model,
+            &chassis,
+            coastlines.clone(),
+        ),
     )?;
 
     drain_demand(&demand_rx, &mut demand);
     let mut tick: u64 = 0;
     loop {
-        thread::sleep(Duration::from_secs_f64(TICK_SECONDS));
+        wait_for_tick(&demand_rx, &mut demand, prev_time);
         tick += 1;
         drain_demand(&demand_rx, &mut demand);
+        if demand.conns && !geo_loaded {
+            ip_table = IpTable::load(&assets);
+            coastlines = load_coastlines(&assets);
+            geo_loaded = true;
+            write_line(
+                &mut out,
+                &meta_value(
+                    prev_cpu.len().saturating_sub(1),
+                    nvidia_pci.is_some(),
+                    ip_table.starts.len(),
+                    &model,
+                    &chassis,
+                    coastlines.clone(),
+                ),
+            )?;
+        }
         let now = Instant::now();
         let dt = (now - prev_time).as_secs_f64().max(1e-3);
 
@@ -1101,16 +1139,16 @@ fn run() -> io::Result<()> {
         let cur_disk = read_disks(&mut block_cache);
 
         if tick.is_multiple_of(NVIDIA_EVERY) {
-            nvidia = read_nvidia(nvidia_pci.as_deref());
+            nvidia = read_nvidia(nvidia_pci.as_deref(), &mut nvidia_state);
         }
 
         let temps = read_temps(&mut temp_cache);
-        let cpu = cpu_json(&prev_cpu, &cur_cpu, &temps, &core_ids);
+        let cpu = cpu_json(&prev_cpu, &cur_cpu, temps, &core_ids);
         let (freq_mhz, cur_freq_mhz) = xe_freq();
 
         let mut sample = Map::new();
         sample.insert("cpu".to_owned(), cpu);
-        sample.insert("mem".to_owned(), read_mem(page_kb));
+        sample.insert("mem".to_owned(), read_mem(page_kb, &mut mem_cache));
         sample.insert(
             "gpu".to_owned(),
             json!({
@@ -1122,7 +1160,7 @@ fn run() -> io::Result<()> {
                 "nvidia": nvidia.clone(),
             }),
         );
-        sample.insert("temps".to_owned(), temps_json(&temps));
+        sample.insert("temps".to_owned(), temps_json(temps));
         sample.insert("net".to_owned(), net_rates(&prev_net, &cur_net, dt));
         sample.insert("disk".to_owned(), disk_rates(&prev_disk, &cur_disk, dt));
 
