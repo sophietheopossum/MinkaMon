@@ -84,12 +84,29 @@ fn read_bytes(path: impl AsRef<Path>) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+fn read_bytes_into(path: impl AsRef<Path>, bytes: &mut Vec<u8>) -> bool {
+    bytes.clear();
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
+    file.read_to_end(bytes).is_ok()
+}
+
 fn read_string(path: impl AsRef<Path>) -> Option<String> {
     read_bytes(path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn read_trimmed(path: impl AsRef<Path>) -> Option<String> {
     read_string(path).map(|s| s.trim().to_owned())
+}
+
+fn read_dir_paths(path: impl AsRef<Path>) -> Vec<PathBuf> {
+    match fs::read_dir(path) {
+        Ok(read_dir) => read_dir
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 fn read_dir_sorted(path: impl AsRef<Path>) -> Vec<PathBuf> {
