@@ -42,23 +42,21 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const TICK_SECONDS: f64 = 1.0;
+const FAST_TICK_MS: u64 = 1000;
+const ECO_TICK_MS: u64 = 5000;
+const MIN_TICK_MS: u64 = 250;
+const MAX_TICK_MS: u64 = 10_000;
 const PROCS_EVERY: u64 = 2;
 const CONNS_EVERY: u64 = 5;
 const NVIDIA_EVERY: u64 = 10;
 const XE_RESCAN_SECONDS: f64 = 60.0;
 const TEMP_RESCAN_SECONDS: f64 = 60.0;
+const TEMP_READ_SECONDS: f64 = 5.0;
+const ZONE_READ_SECONDS: f64 = 5.0;
 const BLOCK_RESCAN_SECONDS: f64 = 30.0;
 
-extern "C" {
-    fn sysconf(name: c_int) -> c_long;
-}
-
-const SC_CLK_TCK: c_int = 2;
-const SC_PAGESIZE: c_int = 30;
-
-fn sysconf_or(name: c_int, fallback: u64) -> u64 {
-    let value = unsafe { sysconf(name) };
+fn sysconf_or(name: libc::c_int, fallback: u64) -> u64 {
+    let value = unsafe { libc::sysconf(name) };
     if value > 0 {
         value as u64
     } else {
