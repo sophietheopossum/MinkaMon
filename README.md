@@ -5,6 +5,12 @@ Eternal Darkness palette.
 
 ```sh
 cargo build --release --manifest-path sampler-rs/Cargo.toml
+
+# AntiWebUI application (successor frontend; schematic parity is still pending)
+cargo build --release
+./target/release/minkamon
+
+# Current Quickshell application
 qs -p /path/to/MinkaMon
 ```
 
@@ -30,10 +36,11 @@ qs -p /path/to/MinkaMon
 ## Architecture
 
 `sampler-rs` (Rust) streams JSON lines adaptively: 1s while MinkaMon is
-hovered or a satellite is open, 5s while it is only a backdrop.
-`services/Sampler.qml` mirrors the stream into reactive properties the
-panels bind to. Process and connection slices are demand-gated by satellite
-visibility, geo data loads on first Globe use, NVIDIA stats come from NVML,
+hovered or a satellite is open, 5s while it is only a backdrop. The
+AntiWebUI application in `src/main.rs` consumes the same stream and demand
+protocol; `services/Sampler.qml` remains the Quickshell frontend's mirror
+into reactive properties. Process and connection slices are demand-gated by
+satellite visibility, geo data loads on first Globe use, NVIDIA stats come from NVML,
 and the sampler runs at idle CPU/IO priority. No polling from QML, one
 sampler process, nothing leaves the machine. `scripts/sampler.py` is the
 previous implementation, kept as a reference/fallback.
