@@ -375,6 +375,7 @@ pub fn main_body(state: AppState, floating: bool) -> Div {
         .child(
             div()
                 .flex_1()
+                .min_h(0.0)
                 .w_full()
                 .px(10.0_f32)
                 .pt(2.0_f32)
@@ -428,6 +429,7 @@ fn system_panel(state: AppState) -> Div {
         .relative()
         .w_full()
         .h_full()
+        .min_h(0.0)
         .overflow_hidden()
         .on_resized(move |w, h| {
             if w > 0.0 && h > 0.0 {
@@ -1182,4 +1184,38 @@ fn schematic_svg(sample: &Value, meta: &Value, width: f64, height: f64, alive: b
     };
     chart = chart.children(shapes);
     chart
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn close(actual: f64, expected: f64) -> bool {
+        (actual - expected).abs() < 0.01
+    }
+
+    #[test]
+    fn pad_geometry_stretches_non_uniformly_and_fits() {
+        // ScreenPad map area once dock (44) and side column (400) are out:
+        // surface 1520x471 minus top bar, panel chrome and insets.
+        let g = BoardGeom::new(1476.0, 396.0, true);
+        assert!(close(g.bsx, (1476.0 - 12.0) / 324.0), "bsx={}", g.bsx);
+        assert!(close(g.bsy, (396.0 - 4.0) / 222.0), "bsy={}", g.bsy);
+        assert!(close(g.bs, g.bsy), "uniform scalar takes the smaller axis");
+        // The whole board outline stays inside the map on both axes.
+        assert!(g.x(2.0) + g.sx(320.0) <= 1476.0);
+        assert!(g.y(2.0) + g.sy(218.0) <= 396.0);
+        // Fan radius uses the uniform scalar, not the wide horizontal one.
+        assert!(close(g.s(30.0), 30.0 * g.bsy));
+    }
+
+    #[test]
+    fn floating_geometry_fits() {
+        let g = BoardGeom::new(620.0, 470.0, true);
+        assert!(g.x(2.0) + g.sx(320.0) <= 620.0);
+        assert!(g.y(2.0) + g.sy(218.0) <= 470.0);
+        let t = BoardGeom::new(620.0, 470.0, false);
+        assert!(t.x(0.0) + t.sx(440.0) <= 620.0);
+        assert!(t.y(0.0) + t.sy(400.0) <= 470.0);
+    }
 }

@@ -60,6 +60,7 @@ pub fn panel_frame(
 
     let body = div()
         .flex_1()
+        .min_h(0.0)
         .w_full()
         .overflow_hidden()
         .px(12.0_f32)
