@@ -6,5 +6,5 @@ Comment=Minka system monitor
 Exec=minkamon
 Icon=utilities-system-monitor
 Terminal=false
-Categories=System;Monitor;Qt;
+Categories=System;Monitor;
 Keywords=system;monitor;cpu;gpu;memory;ram;network;wifi;disk;ssd;temperature;processes;minka;
