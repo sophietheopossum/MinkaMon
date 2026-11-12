@@ -6,7 +6,7 @@ Eternal Darkness palette.
 ```sh
 cargo build --release --manifest-path sampler-rs/Cargo.toml
 
-# AntiWebUI application (successor frontend; schematic parity is still pending)
+# AntiWebUI application (successor frontend)
 cargo build --release
 ./target/release/minkamon
 
@@ -26,8 +26,8 @@ qs -p /path/to/MinkaMon
   space: zones from /proc/zoneinfo (DMA / DMA32 / Normal), per-zone
   used/cache cell counts from actual zone occupancy, stable scatter
   within each zone (exact page positions need root); swap history
-- **THERMAL** — every hwmon temperature sensor, each with a 60 s line
-  chart
+- **THERMAL** — per-component temperature satellites (board / CPU / GPU /
+  SSD / Wi-Fi), each with a 60 s line chart
 - **NETWORK** — up/down rates with history, per-interface breakdown
 - **WORLD VIEW** — rotating orthographic globe; live established TCP
   peers geolocated offline and pulsed on the map
@@ -37,13 +37,17 @@ qs -p /path/to/MinkaMon
 
 `sampler-rs` (Rust) streams JSON lines adaptively: 1s while MinkaMon is
 hovered or a satellite is open, 5s while it is only a backdrop. The
-AntiWebUI application in `src/main.rs` consumes the same stream and demand
-protocol; `services/Sampler.qml` remains the Quickshell frontend's mirror
-into reactive properties. Process and connection slices are demand-gated by
-satellite visibility, geo data loads on first Globe use, NVIDIA stats come from NVML,
-and the sampler runs at idle CPU/IO priority. No polling from QML, one
-sampler process, nothing leaves the machine. `scripts/sampler.py` is the
-previous implementation, kept as a reference/fallback.
+AntiWebUI application under `src/` consumes the same stream and demand
+protocol, hosts the schematic either as a floating window or as the
+ScreenPad layer surface in Duo layout, and uses the shared `MinkaIPC`
+crate for ShojiWM leader lines, overview arrangement, and raising a
+duplicate launch. `services/Sampler.qml` remains the Quickshell frontend's
+mirror into reactive properties. Process and connection slices are
+demand-gated by satellite visibility, geo data loads on first Globe use,
+NVIDIA stats come from NVML, and the sampler runs at idle CPU/IO
+priority. One sampler process, nothing leaves the machine.
+`scripts/sampler.py` is the previous implementation, kept as a
+reference/fallback.
 
 ## Bundled data
 
@@ -52,7 +56,7 @@ previous implementation, kept as a reference/fallback.
 - `assets/ip2country.csv.gz` — derived from the iptoasn.com table via
   sapics/ip-location-db (PDDL-1.0); country centroids in sampler.py
 
-## Debug IPC
+## Debug IPC (Quickshell frontend)
 
 ```sh
 qs -p MinkaMon ipc call debug setPage processes
