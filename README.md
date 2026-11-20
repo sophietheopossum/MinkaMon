@@ -46,15 +46,16 @@ mirror into reactive properties. Process and connection slices are
 demand-gated by satellite visibility, geo data loads on first Globe use,
 NVIDIA stats come from NVML, and the sampler runs at idle CPU/IO
 priority. One sampler process, nothing leaves the machine.
-`scripts/sampler.py` is the previous implementation, kept as a
-reference/fallback.
+The previous Python sampler, `scripts/sampler.py`, was removed on
+20/11/2026; git history has it.
 
 ## Bundled data
 
 - `assets/coastlines.json` — derived from Natural Earth 110m coastline
   (public domain)
 - `assets/ip2country.csv.gz` — derived from the iptoasn.com table via
-  sapics/ip-location-db (PDDL-1.0); country centroids in sampler.py
+  sapics/ip-location-db (PDDL-1.0); country centroids in
+  `sampler-rs/src/centroids.rs`
 
 ## Debug IPC (Quickshell frontend)
 
