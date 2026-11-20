@@ -34,7 +34,6 @@ dependencies = [
 [[package]]
 name = "anti-webui"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-internal",
 ]
@@ -42,7 +41,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-app"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-core",
  "anti-webui-wayland",
@@ -56,7 +54,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-core"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-style",
  "icu_properties",
@@ -74,7 +71,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-internal"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-app",
  "anti-webui-core",
@@ -88,7 +84,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-macros"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -98,12 +93,10 @@ dependencies = [
 [[package]]
 name = "anti-webui-style"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 
 [[package]]
 name = "anti-webui-wayland"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-core",
  "raw-window-handle",
@@ -118,7 +111,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-wayland-shell"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-app",
  "anti-webui-core",
@@ -136,7 +128,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-wgpu"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-core",
  "ash",
@@ -160,7 +151,6 @@ dependencies = [
 [[package]]
 name = "anti-webui-widgets"
 version = "0.1.0"
-source = "git+https://github.com/bea4dev/AntiWebUI?rev=25e82a1d2a7a08658f0eede14cde47b34cce40a6#25e82a1d2a7a08658f0eede14cde47b34cce40a6"
 dependencies = [
  "anti-webui-core",
 ]
