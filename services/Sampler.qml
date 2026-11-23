@@ -13,7 +13,7 @@ Singleton {
     id: root
 
     readonly property string samplerBin: {
-        return Qt.resolvedUrl("../sampler-rs/target/release/minkamon-sampler")
+        return Qt.resolvedUrl("../../target/release/minkamon-sampler")
             .toString().replace("file://", "");
     }
 

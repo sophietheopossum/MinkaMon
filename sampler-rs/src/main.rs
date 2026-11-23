@@ -271,11 +271,14 @@ fn assets_dir() -> PathBuf {
     }
     if let Ok(exe) = std::env::current_exe() {
         let mut dir = exe.parent().map(Path::to_path_buf);
+        // An installed tree keeps assets/ beside the binary; a checkout builds
+        // into MinkaDE's target/<profile>/, two levels below MinkaMon/assets.
         for _ in 0..6 {
             let Some(current) = dir else { break };
-            let candidate = current.join("assets");
-            if candidate.is_dir() {
-                return candidate;
+            for candidate in [current.join("assets"), current.join("MinkaMon").join("assets")] {
+                if candidate.is_dir() {
+                    return candidate;
+                }
             }
             dir = current.parent().map(Path::to_path_buf);
         }

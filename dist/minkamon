@@ -12,15 +12,16 @@
 #
 # Takes the install/config directory as an optional argument so the same
 # script serves an installed tree and a repo checkout. In a checkout the
-# binary is $CONFIG/target/release/minkamon; an installed tree ships it as
+# binary is in the target/ of the MinkaDE Cargo workspace,
+# $CONFIG/../target/release/minkamon; an installed tree ships it as
 # $CONFIG/minkamon. The Quickshell frontend (shell.qml) remains in the tree
 # as the fallback but is no longer what this launcher starts.
 set -eu
 
 CONFIG="${1:-/usr/share/minka/MinkaMon}"
 
-if [ -x "$CONFIG/target/release/minkamon" ]; then
-    BIN="$CONFIG/target/release/minkamon"
+if [ -x "$CONFIG/../target/release/minkamon" ]; then
+    BIN="$CONFIG/../target/release/minkamon"
 elif [ -x "$CONFIG/minkamon" ]; then
     BIN="$CONFIG/minkamon"
 else

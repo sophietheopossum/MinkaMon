@@ -3,12 +3,15 @@
 The Minka system monitor — eDEX-UI-inspired instrument panels in the
 Eternal Darkness palette.
 
+MinkaMon and its sampler are members of the MinkaDE Cargo workspace, so both
+build into MinkaDE's `target/`, and the sampler is found beside `minkamon`.
+
 ```sh
-cargo build --release --manifest-path sampler-rs/Cargo.toml
+cargo build --release -p minkamon-sampler
 
 # AntiWebUI application (successor frontend)
 cargo build --release
-./target/release/minkamon
+../target/release/minkamon
 
 # Current Quickshell application
 qs -p /path/to/MinkaMon

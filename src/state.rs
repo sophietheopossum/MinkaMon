@@ -47,22 +47,13 @@ fn sampler_bin() -> PathBuf {
     {
         return PathBuf::from(path);
     }
+    // Beside this binary first (an installed tree, or the same profile of the
+    // MinkaDE workspace's target/), then the workspace's release sampler, so a
+    // debug MinkaMon still finds one.
     let mut candidates = Vec::new();
     for base in exe_ancestors() {
-        candidates.push(
-            base.join("sampler-rs")
-                .join("target")
-                .join("release")
-                .join("minkamon-sampler"),
-        );
-        candidates.push(
-            base.join("MinkaMon")
-                .join("sampler-rs")
-                .join("target")
-                .join("release")
-                .join("minkamon-sampler"),
-        );
         candidates.push(base.join("minkamon-sampler"));
+        candidates.push(base.join("target").join("release").join("minkamon-sampler"));
     }
     first_existing(candidates).unwrap_or_else(|| PathBuf::from("minkamon-sampler"))
 }
