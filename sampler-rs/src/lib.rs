@@ -1458,7 +1458,7 @@ fn run() -> io::Result<()> {
 pub fn main() {
     if let Err(err) = run() {
         if err.kind() != io::ErrorKind::BrokenPipe {
-            eprintln!("minkamon-sampler: {}", err);
+            minka_note::note!("minkamon-sampler: {}", err);
         }
     }
 }

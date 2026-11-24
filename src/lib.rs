@@ -234,7 +234,7 @@ pub fn main() {
         .app_id("minkamon")
         .run(move || shell_root(guard))
     {
-        eprintln!("minkamon: {error}");
+        minka_note::note!("minkamon: {error}");
         std::process::exit(1);
     }
 }
