@@ -12,10 +12,9 @@ import "../MinkaLink"
 Singleton {
     id: root
 
-    readonly property string samplerBin: {
-        return Qt.resolvedUrl("../../target/release/minkamon-sampler")
-            .toString().replace("file://", "");
-    }
+    // The sampler is part of MinkaDE's one binary; the minkade package
+    // installs this name as a link to it.
+    readonly property string samplerBin: "minkamon-sampler"
 
     readonly property string assetsPath: {
         return Qt.resolvedUrl("../assets")

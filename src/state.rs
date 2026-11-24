@@ -41,21 +41,14 @@ fn first_existing(candidates: Vec<PathBuf>) -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.exists())
 }
 
-fn sampler_bin() -> PathBuf {
-    if let Ok(path) = std::env::var("MINKAMON_SAMPLER_BIN")
-        && !path.is_empty()
-    {
-        return PathBuf::from(path);
+/// The sampler: $MINKAMON_SAMPLER_BIN, else this binary run as
+/// `minkamon-sampler`. MinkaDE's one binary holds both, and /proc/self/exe is
+/// the build this MinkaMon runs even after an upgrade replaced the file.
+fn sampler_process() -> Process {
+    match std::env::var_os("MINKAMON_SAMPLER_BIN").filter(|v| !v.is_empty()) {
+        Some(path) => Process::new(path),
+        None => Process::new("/proc/self/exe").arg("minkamon-sampler"),
     }
-    // Beside this binary first (an installed tree, or the same profile of the
-    // MinkaDE workspace's target/), then the workspace's release sampler, so a
-    // debug MinkaMon still finds one.
-    let mut candidates = Vec::new();
-    for base in exe_ancestors() {
-        candidates.push(base.join("minkamon-sampler"));
-        candidates.push(base.join("target").join("release").join("minkamon-sampler"));
-    }
-    first_existing(candidates).unwrap_or_else(|| PathBuf::from("minkamon-sampler"))
 }
 
 fn assets_dir() -> PathBuf {
@@ -64,13 +57,19 @@ fn assets_dir() -> PathBuf {
     {
         return PathBuf::from(path);
     }
+    // A checkout builds into MinkaDE's target/<profile>/, two levels below
+    // MinkaMon/assets; the package installs them beside the QML tree.
     let mut candidates = Vec::new();
     for base in exe_ancestors() {
         candidates.push(base.join("assets"));
         candidates.push(base.join("MinkaMon").join("assets"));
     }
+    candidates.push(PathBuf::from(INSTALLED_ASSETS));
     first_existing(candidates).unwrap_or_else(|| PathBuf::from("assets"))
 }
+
+/// Where the minkade package puts MinkaMon's assets.
+const INSTALLED_ASSETS: &str = "/usr/share/minka/MinkaMon/assets";
 
 /// Cleanup-time signal writes can race owner disposal (nodes are removed
 /// before cleanups run). At whole-app teardown those writes no longer matter.
@@ -163,7 +162,7 @@ impl AppState {
         let generation = self.sampler_generation.get() + 1;
         self.sampler_generation.set(generation);
 
-        let process = Process::new(sampler_bin())
+        let process = sampler_process()
             .arg(assets_dir())
             .stdin(true)
             .keep(4)

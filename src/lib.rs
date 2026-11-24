@@ -223,7 +223,7 @@ fn shell_root(guard: instance::InstanceGuard) {
     install_leader_overlays(state);
 }
 
-fn main() {
+pub fn main() {
     let guard = match instance::claim() {
         instance::InstanceClaim::Primary(guard) => guard,
         instance::InstanceClaim::Duplicate => return,

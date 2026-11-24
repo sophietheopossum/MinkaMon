@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2024"
 description = "Minka system monitor, fed by minkamon-sampler over stdio"
 
-[[bin]]
+# A library: MinkaDE's one binary (minka/, at the top of the checkout) runs it
+# under the name it was started as. Nothing is built from here alone.
+[lib]
 name = "minkamon"
-path = "src/main.rs"
+path = "src/lib.rs"
+doctest = false
 
 [dependencies]
 # The toolkit is MinkaDE's AntiWebUI submodule, a sibling of this one, so every Minka app
@@ -15,3 +18,5 @@ anti-webui = { path = "../AntiWebUI/src/anti-webui", default-features = false, f
 calloop = { version = "0.14", default-features = false }
 minka-ipc = { package = "MinkaIPC", path = "../MinkaIPC" }
 serde_json = "1"
+# MinkaDE's palette (generated from Proustite.qml), shared by every app.
+proustite = { path = "../Proustite" }

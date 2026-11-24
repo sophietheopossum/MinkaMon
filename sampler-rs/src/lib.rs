@@ -283,6 +283,11 @@ fn assets_dir() -> PathBuf {
             dir = current.parent().map(Path::to_path_buf);
         }
     }
+    // Where the minkade package puts them, beside the QML tree.
+    let installed = Path::new("/usr/share/minka/MinkaMon/assets");
+    if installed.is_dir() {
+        return installed.to_path_buf();
+    }
     PathBuf::from("assets")
 }
 
@@ -1450,7 +1455,7 @@ fn run() -> io::Result<()> {
     }
 }
 
-fn main() {
+pub fn main() {
     if let Err(err) = run() {
         if err.kind() != io::ErrorKind::BrokenPipe {
             eprintln!("minkamon-sampler: {}", err);
