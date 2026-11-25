@@ -1,49 +1,41 @@
 #!/bin/sh
-# MinkaMon launcher: runs the AntiWebUI binary with its output captured.
+# MinkaMon launcher: runs MinkaMon through `minka-keep --once`, which does
+# the work. The keeper runs `minka minkamon` ($MINKA_BIN, else the installed
+# /usr/bin/minka, else a build in the checkout) with its output appended to
+# ~/.local/state/minka/minkamon.log, rolled at 2MB. It does not restart it.
 #
 # The Desktop Entry spec only recognises double quotes, so carrying a shell
 # redirect in `Exec=` means escaping every quote and `$` into something
-# unreadable. The redirect lives here instead, which also gives `minkamon`
-# as a plain command.
+# unreadable. The redirect lives behind a script instead, which also gives
+# `minkamon` as a plain command: the package installs this as
+# /usr/bin/minkamon, which the start menu's entry runs.
 #
-# Without this, stdout and stderr both land on /dev/null: a single-instance
+# Without it, stdout and stderr both land on /dev/null: a single-instance
 # rejection, a sampler traceback and a renderer panic are all equally
 # invisible.
 #
-# Takes the install/config directory as an optional argument so the same
-# script serves an installed tree and a repo checkout. MinkaMon is part of
-# MinkaDE's one binary, minka: $MINKA_BIN when set (a build to try, such as a
-# checkout's target/release-fast/minka), else the installed /usr/bin/minka,
-# else a build in the checkout this tree is part of. It runs as
-# `minka minkamon`.
+# The session config passes MinkaMon's directory as the argument. It is not
+# needed now: the keeper finds a checkout's builds from its own path.
+#
+# The keeper beside this script comes first: in a MinkaDE checkout,
+# packaging/minka-keep. The session runs the checkout's launcher
+# ($MINKA_MON_BIN) with whatever minkade package is installed, and packages
+# up to 0.93.0 have no /usr/lib/minka/minka-keep. Installed as
+# /usr/bin/minkamon it has no keeper beside it, and uses the one its own
+# package installed. $MINKA_KEEP names another, as the packaging tests do.
+# With no keeper this logs why and exits 127.
 set -eu
 
-CONFIG="${1:-/usr/share/minka/MinkaMon}"
-
-BIN=
-for candidate in "${MINKA_BIN:-}" /usr/bin/minka \
-    "$CONFIG/../target/release-fast/minka" "$CONFIG/../target/release/minka"; do
-    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-        BIN=$candidate
-        break
+HERE=$(dirname "$0")
+for KEEP in "${MINKA_KEEP:-}" "$HERE/../../packaging/minka-keep" /usr/lib/minka/minka-keep; do
+    if [ -n "$KEEP" ] && [ -x "$KEEP" ]; then
+        exec "$KEEP" --once minkamon
     fi
 done
-if [ -z "$BIN" ]; then
-    printf 'minkamon: no minka binary (MINKA_BIN, /usr/bin/minka, or a build beside %s)\n' "$CONFIG" >&2
-    exit 127
-fi
 
 LOG_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/minka"
-LOG="$LOG_DIR/minkamon.log"
-mkdir -p "$LOG_DIR"
-
-# Roll at 2MB keeping one generation. A monitor that re-samples sensors on
-# every resume is not somewhere to leave growth unbounded — this project has
-# already had a log directory reach 71GB.
-if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2097152 ]; then
-    mv -f "$LOG" "$LOG.1"
-fi
-
-printf '\n=== MinkaMon starting: %s ===\n' "$(date -Is)" >> "$LOG"
-
-exec "$BIN" minkamon >> "$LOG" 2>&1
+mkdir -p "$LOG_DIR" 2> /dev/null || true
+printf '\n=== minkamon no minka-keep (MINKA_KEEP, %s or %s), not starting: %s ===\n' \
+    "$HERE/../../packaging/minka-keep" /usr/lib/minka/minka-keep "$(date -Is)" \
+    2> /dev/null >> "$LOG_DIR/minkamon.log" || true
+exit 127
