@@ -1,10 +1,10 @@
 //! Application state, sampler lifecycle, window management, and services.
 
-use crate::instance::InstanceGuard;
 use crate::ipc::{IpcController, IpcData, MAIN_ROLE, RectF};
 use crate::model::*;
 use anti_webui::prelude::*;
 use anti_webui::shell::{Layer, LayerHandle, Process, RunningProcess};
+use minka_instance::{Event, Instance};
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -116,12 +116,12 @@ pub struct AppState {
     pad_lift_generation: Rc<Cell<u64>>,
     service_tick: Rc<Cell<u64>>,
     settings_mtime: Rc<Cell<Option<SystemTime>>>,
-    guard: Rc<InstanceGuard>,
+    instance: Rc<Instance>,
     pub ipc: Rc<IpcController>,
 }
 
 impl AppState {
-    pub fn new(guard: InstanceGuard) -> Self {
+    pub fn new(instance: Instance) -> Self {
         Self {
             sample: signal(Value::Null),
             meta: signal(Value::Null),
@@ -153,7 +153,7 @@ impl AppState {
             pad_lift_generation: Rc::new(Cell::new(0)),
             service_tick: Rc::new(Cell::new(0)),
             settings_mtime: Rc::new(Cell::new(None)),
-            guard: Rc::new(guard),
+            instance: Rc::new(instance),
             ipc: Rc::new(IpcController::new()),
         }
     }
@@ -603,7 +603,11 @@ impl AppState {
         let tick = self.service_tick.get() + 1;
         self.service_tick.set(tick);
 
-        if self.guard.take_rejected() {
+        // A launch turned away asks for the window. Requests are not for
+        // MinkaMon: dropping one closes its connection.
+        let events = self.instance.events().try_iter();
+        let turned_away = events.filter(|event| matches!(event, Event::TurnedAway));
+        if turned_away.count() > 0 {
             self.on_duplicate();
         }
         if tick % 5 == 1 {

@@ -1,7 +1,6 @@
 //! MinkaMon application entry point and Shell hosting.
 
 mod globe;
-mod instance;
 mod ipc;
 mod model;
 mod panels;
@@ -213,8 +212,8 @@ fn install_leader_overlays(state: AppState) {
     });
 }
 
-fn shell_root(guard: instance::InstanceGuard) {
-    let state = AppState::new(guard);
+fn shell_root(instance: minka_instance::Instance) {
+    let state = AppState::new(instance);
     state.spawn_sampler();
     state.install_demand_effect();
     state.start_services();
@@ -224,15 +223,15 @@ fn shell_root(guard: instance::InstanceGuard) {
 }
 
 pub fn main() {
-    let guard = match instance::claim() {
-        instance::InstanceClaim::Primary(guard) => guard,
-        instance::InstanceClaim::Duplicate => return,
+    // A second launch exits here, and the first raises its window.
+    let minka_instance::Claim::Primary(instance) = minka_instance::claim("minkamon") else {
+        return;
     };
 
     if let Err(error) = Shell::new()
         .namespace("minkamon")
         .app_id("minkamon")
-        .run(move || shell_root(guard))
+        .run(move || shell_root(instance))
     {
         minka_note::note!("minkamon: {error}");
         std::process::exit(1);
